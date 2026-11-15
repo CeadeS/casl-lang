@@ -159,9 +159,16 @@ pub struct EffectResult {
     pub outcome: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub performed: Option<bool>,
-    /// The effect id (= request digest) — the handle for `resolve`.
+    /// The attempt id of an irreversible request — the handle for `resolve`. On an `unresolved`
+    /// denial: the attempt that blocks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub effect: Option<String>,
+    pub attempt: Option<i64>,
+    /// The identity of the credential the attempt ran under (never a secret).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<String>,
+    /// The request digest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -173,8 +180,9 @@ pub struct EffectResult {
 /// `resolve` params: the clarified outcome of an effect whose outcome was unknown.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResolveParams {
+    /// The attempt id an effect result reported (kept raw: a non-integer is a typed refusal).
     #[serde(default)]
-    pub effect: String,
+    pub attempt: Value,
     #[serde(default)]
     pub outcome: String,
     #[serde(default)]

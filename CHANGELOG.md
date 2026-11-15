@@ -31,6 +31,13 @@ the record). Both brokers, pinned by shared corpora (`tests/test_approval_signed
   execution (`account_mismatch`, `account_unbound`). Identity = a configured reference or
   issuer/tenant/subject derived from the JWT (`--account ID` | `--account-from-token`); journaled, never
   the secret. `tests/test_account_binding.py`.
+- **Reservations across broker processes** (casl-lang#4): using an approval, starting an attempt and
+  resolving one are guarded appends — state replay, check and write in one journal transaction. Twelve
+  concurrent `casl act` on one approval perform once.
+- **Attempts, scoped to the account** (casl-lang#5): an irreversible request has an attempt id; an unknown
+  outcome blocks the scope (account, request digest), not the digest alone; `resolve` takes the attempt
+  (`casl resolve --attempt N`) and reports whose it was. Effect results carry `attempt`, `account`,
+  `request` instead of `effect`.
 - **Host interface** (`casl prepare | act | resolve | journal verify`, Rust CLI): one approved action through
   the broker, JSON out. Template `examples/os_pilot/create_task.casl`; walkthrough `docs/os-pilot.md`;
   end-to-end acceptance `tests/test_os_pilot_act.py`.

@@ -101,6 +101,40 @@ impl Backend for MockBackend {
     }
 }
 
+enum Ledger {
+    Memory(journal::MemoryLedger),
+    Durable(journal::Journal),
+}
+
+impl Ledger {
+    fn state(&self) -> Result<journal::State, String> {
+        match self {
+            Ledger::Memory(m) => Ok(m.state()),
+            Ledger::Durable(j) => j.state(),
+        }
+    }
+
+    /// Guarded append (approval, intent, resolve): refused with a `Conflict` if the state forbids it.
+    fn reserve(
+        &mut self,
+        kind: &str,
+        body: serde_json::Value,
+        ts: i64,
+    ) -> Result<(i64, serde_json::Value), journal::ReserveError> {
+        match self {
+            Ledger::Memory(m) => m.reserve(kind, body),
+            Ledger::Durable(j) => j.reserve(kind, body, ts),
+        }
+    }
+
+    fn append(&mut self, kind: &str, body: &serde_json::Value, ts: i64) -> Result<i64, String> {
+        match self {
+            Ledger::Memory(m) => Ok(m.append(kind, body)),
+            Ledger::Durable(j) => j.append(kind, body, ts),
+        }
+    }
+}
+
 /// What a valid consent token is bound to: (request digest, approval nonce, target account).
 type ConsentBinding = (Option<String>, Option<String>, Option<String>);
 
@@ -134,13 +168,11 @@ pub struct Broker {
     pub fixed_now: Option<i64>,
     /// Capabilities the broker PERFORMS (mediated egress): cap → destination allowlist + transport.
     pub mediated: BTreeMap<String, egress::Mediated>,
-    /// The run journal; with it, replay protection and "unknown outcome" survive a restart.
-    journal: Option<journal::Journal>,
-    /// request digest → latest outcome of an irreversible mediated effect.
-    effects: BTreeMap<String, String>,
+    /// The ledger of approvals and attempts: the run journal (durable, shared by concurrent broker
+    /// processes) or, without one, the same state in memory for this process only.
+    ledger: Ledger,
     declared_caps: BTreeSet<String>,
     consents: HashMap<String, Consent>,
-    nonces: BTreeSet<String>,
     consent_counter: u64,
     initialized: bool,
 }
@@ -156,11 +188,9 @@ impl Broker {
             approval_class: BTreeMap::new(),
             fixed_now: None,
             mediated: BTreeMap::new(),
-            journal: None,
-            effects: BTreeMap::new(),
+            ledger: Ledger::Memory(journal::MemoryLedger::default()),
             declared_caps: BTreeSet::new(),
             consents: HashMap::new(),
-            nonces: BTreeSet::new(),
             consent_counter: 0,
             initialized: false,
         }
@@ -185,22 +215,17 @@ impl Broker {
         self
     }
 
-    /// Builder: attach the run journal and load its state (used nonces, effect outcomes).
+    /// Builder: attach the run journal (it must be readable — its state decides every reservation).
     pub fn with_journal(mut self, j: journal::Journal) -> Result<Self, String> {
-        let (nonces, effects) = j.replay()?;
-        self.nonces.extend(nonces);
-        self.effects.extend(effects);
-        self.journal = Some(j);
+        j.state()?;
+        self.ledger = Ledger::Durable(j);
         Ok(self)
     }
 
-    /// Append to the run journal. `Err` ⇒ nothing was written; callers log BEFORE acting (fail closed).
-    fn log(&mut self, kind: &str, body: serde_json::Value) -> Result<(), String> {
+    /// Append to the ledger. `Err` ⇒ nothing was written; callers log BEFORE acting (fail closed).
+    fn log(&mut self, kind: &str, body: serde_json::Value) -> Result<i64, String> {
         let now = self.now();
-        match self.journal.as_mut() {
-            Some(j) => j.append(kind, &body, now).map(|_| ()),
-            None => Ok(()),
-        }
+        self.ledger.append(kind, &body, now)
     }
 
     fn now(&self) -> i64 {
@@ -277,6 +302,20 @@ impl Broker {
             outcome: outcome.map(str::to_string),
             ..Default::default()
         };
+        let unresolved = |attempt: i64, account: Option<String>| {
+            EffectResult {
+            allowed: false,
+            tool: tool.clone(),
+            site: site.clone(),
+            outcome: Some("unresolved".into()),
+            attempt: Some(attempt),
+            account,
+            reason: Some(format!(
+                "attempt {attempt} of this exact request has an unknown outcome or is in flight — clarify it at the target system and `resolve` it before retrying"
+            )),
+            ..Default::default()
+        }
+        };
         if !self.granted_tools.contains(&tool) {
             return Ok(deny(
                 format!("capability {tool:?} not granted for site {site} (deny-by-default)"),
@@ -303,39 +342,59 @@ impl Broker {
                     None,
                 ));
             }
-            if irreversible && self.effects.get(&s.digest()).map(String::as_str) == Some("unknown")
-            {
-                // NO BLIND REPEAT: an earlier attempt of this exact request may have reached the target.
-                return Ok(deny(
-                    "an earlier attempt of this exact request has an unknown outcome — clarify it at the target system and `resolve` it before retrying".into(),
-                    Some("unresolved"),
-                ));
+            if irreversible {
+                // NO BLIND REPEAT: an earlier attempt of this exact request, under this account, may
+                // have reached the target. (The same request under another account is another resource.)
+                if let Some(a) = self
+                    .ledger
+                    .state()?
+                    .blocking(m.account.as_deref(), &s.digest())
+                {
+                    return Ok(unresolved(a, m.account.clone()));
+                }
             }
             spec = Some(s);
         }
         let digest = spec.as_ref().map(|s| s.digest());
+        let held = self.mediated.get(&tool).and_then(|m| m.account.clone());
+        let mut attempt: Option<i64> = None;
         if irreversible {
             // (A) an irreversible cap needs a fresh, matching, one-shot consent token.
-            let (bound, nonce, account) =
+            let (bound, nonce, _account) =
                 match self.check_consent(p.approval.as_deref(), &tool, &site, p.request.as_ref()) {
                     Ok(x) => x,
                     Err(reason) => return Ok(deny(reason, None)),
                 };
             match &digest {
-                None => self.log(
-                    "grant",
-                    json!({"cap": tool, "site": site, "request": bound, "nonce": nonce}),
-                )?,
-                Some(d) => {
-                    // INTENT before the send, durably: if the broker dies after this line the journal
-                    // still says the request may have gone out (replayed as "unknown").
+                None => {
                     self.log(
-                        "intent",
-                        json!({"effect": d, "cap": tool, "site": site, "nonce": nonce, "account": account}),
+                        "grant",
+                        json!({"cap": tool, "site": site, "request": bound, "nonce": nonce}),
                     )?;
-                    self.effects.insert(d.clone(), "unknown".into());
                 }
-            }
+                Some(d) => {
+                    // INTENT before the send, durably, and as a RESERVATION: the journal re-checks
+                    // under its write lock that this scope is not in flight and this approval made no
+                    // attempt yet — of several broker processes only one proceeds. If the broker dies
+                    // after this line the journal still says the request may have gone out (an intent
+                    // without a result replays as "unknown").
+                    let now = self.now();
+                    let body = json!({"effect": d, "cap": tool, "site": site, "nonce": nonce, "account": held});
+                    match self.ledger.reserve("intent", body, now) {
+                        Ok((seq, _)) => attempt = Some(seq),
+                        Err(journal::ReserveError::Conflict(journal::Conflict::Unresolved(a))) => {
+                            return Ok(unresolved(a, held))
+                        }
+                        Err(journal::ReserveError::Conflict(_)) => {
+                            return Ok(deny(
+                                "this approval was already used for an attempt (one approval, one attempt)".into(),
+                                None,
+                            ))
+                        }
+                        Err(journal::ReserveError::Io(e)) => return Err(e),
+                    }
+                }
+            };
             if let Some(c) = p.approval.as_deref().and_then(|t| self.consents.get_mut(t)) {
                 c.used = true; // one-shot: a token authorizes exactly ONE attempt
             }
@@ -371,10 +430,10 @@ impl Broker {
             Err(f) => (f.outcome(), None, None),
         };
         if irreversible {
-            self.effects.insert(digest.clone(), outcome.into());
             self.log(
                 "result",
-                json!({"effect": digest, "outcome": outcome, "status": status,
+                json!({"attempt": attempt, "effect": digest, "account": held, "outcome": outcome,
+                       "status": status,
                        "body_sha256": body.as_ref().map(|b| journal::sha256_hex(b.as_bytes()))}),
             )?;
         }
@@ -385,7 +444,9 @@ impl Broker {
             outcome: Some(outcome.into()),
             performed: Some(outcome == "performed"),
             receipt: status.map(|st| json!({"request": digest, "status": st})),
-            effect: Some(digest),
+            attempt,
+            account: if irreversible { held } else { None },
+            request: Some(digest),
             status,
             body,
             ..Default::default()
@@ -393,37 +454,48 @@ impl Broker {
     }
 
     /// `resolve` without the RPC envelope (for an in-process host such as `casl resolve`).
-    pub fn resolve_effect(
+    pub fn resolve_attempt(
         &mut self,
-        effect: &str,
+        attempt: i64,
         outcome: &str,
         note: &str,
     ) -> Result<serde_json::Value, String> {
         self.resolve(ResolveParams {
-            effect: effect.into(),
+            attempt: json!(attempt),
             outcome: outcome.into(),
             note: note.into(),
         })
     }
 
-    /// The `resolve` method: record the clarified outcome of an effect whose outcome was unknown.
+    /// The `resolve` method: record the clarified outcome of an ATTEMPT whose outcome was unknown.
+    /// Addressed by attempt id, so it cannot land on another account's attempt.
     fn resolve(&mut self, p: ResolveParams) -> Result<serde_json::Value, String> {
         if p.outcome != "performed" && p.outcome != "not_performed" {
             return Ok(
                 json!({"resolved": false, "reason": "outcome must be 'performed' or 'not_performed'"}),
             );
         }
-        if self.effects.get(&p.effect).map(String::as_str) != Some("unknown") {
+        let Some(attempt) = p.attempt.as_i64().filter(|_| p.attempt.is_i64()) else {
             return Ok(
-                json!({"resolved": false, "reason": "no effect with an unknown outcome under this id"}),
+                json!({"resolved": false, "reason": "attempt must be the integer id an effect result reported"}),
             );
+        };
+        let now = self.now();
+        let body = json!({"attempt": attempt, "outcome": p.outcome, "note": p.note});
+        match self.ledger.reserve("resolve", body, now) {
+            Ok((_, written)) => {
+                let mut out = json!({"resolved": true, "attempt": attempt, "outcome": p.outcome,
+                                     "request": written["effect"]});
+                if !written["account"].is_null() {
+                    out["account"] = written["account"].clone();
+                }
+                Ok(out)
+            }
+            Err(journal::ReserveError::Conflict(_)) => Ok(
+                json!({"resolved": false, "reason": "no attempt with an unknown outcome under this id"}),
+            ),
+            Err(journal::ReserveError::Io(e)) => Err(e),
         }
-        self.log(
-            "resolve",
-            json!({"effect": p.effect, "outcome": p.outcome, "note": p.note}),
-        )?;
-        self.effects.insert(p.effect.clone(), p.outcome.clone());
-        Ok(json!({"resolved": true, "effect": p.effect, "outcome": p.outcome}))
     }
 
     /// Transport-agnostic JSON-RPC dispatch.
@@ -553,6 +625,10 @@ impl Broker {
                     // SIGNED mode: the human is bound by a signature the calling agent cannot produce.
                     // The token is ALWAYS bound to the digest the signer committed to.
                     let now = self.now();
+                    let mut seen = match self.ledger.state() {
+                        Ok(st) => st.nonces,
+                        Err(e) => return Response::err(id, codes::INTERNAL, e),
+                    };
                     let required = self
                         .approval_class
                         .get(&p.tool)
@@ -565,7 +641,7 @@ impl Broker {
                         &p.tool,
                         &p.site,
                         now,
-                        &mut self.nonces,
+                        &mut seen,
                         &required,
                         held.as_deref(),
                     ) {
@@ -579,17 +655,30 @@ impl Broker {
                         },
                         Ok(v) => {
                             // journal the verified approval (payload + signature ⇒ re-verifiable
-                            // later) BEFORE minting the token
+                            // later) BEFORE minting the token — as a RESERVATION of the nonce: of
+                            // several broker processes holding the same approval, one wins
                             let env = p.signed.as_ref();
                             let part = |k: &str| env.and_then(|e| e.get(k)).cloned();
-                            if let Err(e) = self.log(
-                                "approval",
-                                json!({"nonce": v.nonce, "cap": p.tool, "site": p.site,
-                                       "request": v.request, "program": v.program, "exp": v.exp,
-                                       "key": v.key, "class": v.class, "account": v.account,
-                                       "payload": part("payload"), "sig": part("sig")}),
-                            ) {
-                                return Response::err(id, codes::INTERNAL, e);
+                            let body = json!({"nonce": v.nonce, "cap": p.tool, "site": p.site,
+                                              "request": v.request, "program": v.program, "exp": v.exp,
+                                              "key": v.key, "class": v.class, "account": v.account,
+                                              "payload": part("payload"), "sig": part("sig")});
+                            match self.ledger.reserve("approval", body, now) {
+                                Ok(_) => {}
+                                Err(journal::ReserveError::Conflict(_)) => {
+                                    let r = ConsentResult {
+                                        granted: false,
+                                        token: None,
+                                        reason: Some("this approval was already used".into()),
+                                        code: Some("replayed".into()),
+                                        approver_class: None,
+                                        account: None,
+                                    };
+                                    return Response::ok(id, serde_json::to_value(r).unwrap());
+                                }
+                                Err(journal::ReserveError::Io(e)) => {
+                                    return Response::err(id, codes::INTERNAL, e)
+                                }
                             }
                             let token = self.mint_token();
                             self.consents.insert(

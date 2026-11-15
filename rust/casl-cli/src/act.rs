@@ -35,7 +35,7 @@ const VALFLAGS: &[&str] = &[
     "--account",
     "--require-class",
     "--mock-egress",
-    "--effect",
+    "--attempt",
     "--outcome",
     "--note",
 ];
@@ -371,13 +371,13 @@ fn act(a: &Args) -> Result<(i32, Value), (i32, String)> {
 /// `casl resolve` — record the outcome, clarified at the target system, of an effect that was unknown.
 pub fn cmd_resolve(args: &[String]) -> i32 {
     let a = Args::parse(args, VALFLAGS);
-    let (Some(jp), Some(effect), Some(outcome)) =
-        (a.val("journal"), a.val("effect"), a.val("outcome"))
-    else {
-        return fail(
-            2,
-            "usage: casl resolve --journal PATH --effect ID --outcome performed|not_performed [--note TEXT]".into(),
-        );
+    let usage = "usage: casl resolve --journal PATH --attempt ID --outcome performed|not_performed [--note TEXT]";
+    let (Some(jp), Some(attempt), Some(outcome)) = (
+        a.val("journal"),
+        a.val("attempt").and_then(|v| v.parse::<i64>().ok()),
+        a.val("outcome"),
+    ) else {
+        return fail(2, usage.into());
     };
     if !std::path::Path::new(jp).is_file() {
         return fail(2, format!("no journal at {jp}"));
@@ -387,7 +387,7 @@ pub fn cmd_resolve(args: &[String]) -> i32 {
         Err((c, m)) => return fail(c, m),
     };
     // No `initialize` (that would journal a run): resolution is a journal operation, not a run.
-    let r = b.resolve_effect(effect, outcome, a.val("note").unwrap_or(""));
+    let r = b.resolve_attempt(attempt, outcome, a.val("note").unwrap_or(""));
     match r {
         Ok(v) => {
             let ok = v.get("resolved").and_then(Value::as_bool).unwrap_or(false);

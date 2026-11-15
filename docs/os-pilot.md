@@ -61,10 +61,15 @@ of the credential it is about to use, at consent and again at execution; a misma
 - Destination: `https://` to an allowlisted DNS name only; no redirects, no environment proxy; a name
   resolving to a non-public address is never contacted.
 - **Unknown outcome ⇒ no repeat.** If the request may have reached the target (timeout, dropped connection,
-  5xx, TLS failure) the outcome is `unknown` and the same request is blocked — even with a fresh approval —
-  until the host has looked it up at the target and recorded the finding:
-  `casl resolve --journal journal.sqlite --effect <id> --outcome performed|not_performed --note "..."`.
-  Put a client-generated id into the request so the lookup is possible.
+  5xx, TLS failure) the outcome is `unknown` and the same request **under the same account** is blocked —
+  even with a fresh approval — until the host has looked it up at the target and recorded the finding:
+  `casl resolve --journal journal.sqlite --attempt <id> --outcome performed|not_performed --note "..."`.
+  Every irreversible attempt has an id (`effect.attempt`); a blocked call reports the attempt that blocks
+  it. The same request under another account is a different resource and is not blocked. Put a
+  client-generated id into the request so the lookup is possible.
+- **Concurrent calls.** Several `casl act` processes may share one journal. Using an approval and starting
+  an attempt are reservations made inside one journal write transaction, so one signed approval performs
+  at most once and a request that is in flight blocks the others, whichever process they run in.
 - Journal: `run`, `approval` (with payload and signature), `intent` (before the send), `result`, `resolve`;
   hash-chained; `casl journal verify journal.sqlite`.
 

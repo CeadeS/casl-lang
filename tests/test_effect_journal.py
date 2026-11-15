@@ -32,15 +32,15 @@ def _effect(req=REQ):
     return ("effect", {"site": "Create", "tool": "tasks", "approval": "$token", "request": req})
 
 
-def _resolve(outcome, effect=D):
-    return ("resolve", {"effect": effect, "outcome": outcome, "note": "looked up at the target"})
+def _resolve(outcome, attempt="$attempt"):
+    return ("resolve", {"attempt": attempt, "outcome": outcome, "note": "looked up at the target"})
 
 
 # name, seed (journal entries written before the first session), [(mock transport, steps), ...], journal kinds
 CORPUS = [
     ("performed", [], [("200", [
         (_consent("n1"), {"granted": True}),
-        (_effect(), {"allowed": True, "performed": True, "outcome": "performed", "status": 200, "effect": D})])],
+        (_effect(), {"allowed": True, "performed": True, "outcome": "performed", "status": 200, "request": D, "attempt": 3})])],
      ["run", "approval", "intent", "result"]),
     ("target_rejects", [], [("404", [
         (_consent("n1"), {"granted": True}),
@@ -50,13 +50,14 @@ CORPUS = [
      ["run", "approval", "intent", "result", "approval", "intent", "result"]),
     ("timeout_no_blind_repeat", [], [("unknown", [
         (_consent("n1"), {"granted": True}),
-        (_effect(), {"allowed": True, "performed": False, "outcome": "unknown"}),
-        (_effect(), {"allowed": False, "outcome": "unresolved"}),        # same token: blocked
+        (_effect(), {"allowed": True, "performed": False, "outcome": "unknown", "attempt": 3}),
+        (_effect(), {"allowed": False, "outcome": "unresolved", "attempt": 3}),   # same token: blocked
         (_consent("n2"), {"granted": True}),
-        (_effect(), {"allowed": False, "outcome": "unresolved"}),        # even a FRESH approval: blocked
+        (_effect(), {"allowed": False, "outcome": "unresolved", "attempt": 3}),   # even a FRESH approval: blocked
         (_resolve("maybe"), {"resolved": False}),
-        (_resolve("not_performed"), {"resolved": True}),
+        (_resolve("not_performed"), {"resolved": True, "attempt": 3, "request": D}),
         (_resolve("not_performed"), {"resolved": False}),                # nothing left to resolve
+        (_resolve("performed", attempt="3"), {"resolved": False}),       # an attempt id is an integer
         (_effect(), {"allowed": True, "outcome": "unknown"})])],         # the block did not burn token n2
      ["run", "approval", "intent", "result", "approval", "resolve", "intent", "result"]),
     ("server_error_is_unknown", [], [("503", [
@@ -90,20 +91,22 @@ CORPUS = [
         (_consent("n1", REQ_EVIL), {"granted": True}),
         (_effect(REQ_EVIL), {"allowed": False})])],
      ["run", "approval"]),
-    ("resolve_unknown_id", [], [("200", [(_resolve("performed", "no-such-effect"), {"resolved": False})])],
+    ("resolve_unknown_id", [], [("200", [(_resolve("performed", 999), {"resolved": False})])],
      ["run"]),
 ]
 _IDS = [c[0] for c in CORPUS]
 
 
 def _drive(client, steps):
-    token = None
+    token = attempt = None
     try:
         for (method, params), expect in steps:
-            params = {k: (token if v == "$token" else v) for k, v in params.items()}
+            params = {k: (token if v == "$token" else attempt if v == "$attempt" else v) for k, v in params.items()}
             out = client._call(method, params)
             if method == "consent" and out.get("token"):
                 token = out["token"]
+            if method == "effect" and out.get("attempt") is not None:
+                attempt = out["attempt"]
             for k, v in expect.items():
                 assert out.get(k) == v, (method, k, out, expect)
     finally:
@@ -210,10 +213,10 @@ def test_journal_cli_exit_codes(tmp_path):
 def test_journal_write_failure_fails_closed(tmp_path):
     """No journaled intent ⇒ no send: if the journal cannot be written the effect is not performed."""
     class Broken(Journal):
-        def append(self, kind, body, ts):
+        def reserve(self, kind, body, ts):
             if kind == "intent":
                 raise sqlite3.OperationalError("disk full")
-            return super().append(kind, body, ts)
+            return super().reserve(kind, body, ts)
 
     t = egress.MockTransport(status=200, body="OK")
     j = Broken(str(tmp_path / "j.sqlite"))
@@ -226,3 +229,55 @@ def test_journal_write_failure_fails_closed(tmp_path):
         c._call("effect", {"site": "Create", "tool": "tasks", "approval": token, "request": REQ})
     assert t.calls == []                                   # nothing left the broker
     j.close()
+
+
+# -- reservations: several broker processes on one journal (casl-lang issue #4) ---------------------------
+def test_two_journal_connections_cannot_both_reserve(tmp_path):
+    from casl.journal import Conflict
+    path = str(tmp_path / "j.sqlite")
+    a, b = Journal(path), Journal(path)          # two brokers: each loaded "nothing used yet"
+    try:
+        a.reserve("approval", {"nonce": "n1"}, NOW)
+        with pytest.raises(Conflict) as e:
+            b.reserve("approval", {"nonce": "n1"}, NOW)
+        assert e.value.code == "replayed"
+        attempt = a.reserve("intent", {"effect": D, "account": "alice", "nonce": "n1"}, NOW)
+        with pytest.raises(Conflict) as e:       # another approval, same scope, while in flight
+            b.reserve("intent", {"effect": D, "account": "alice", "nonce": "n2"}, NOW)
+        assert (e.value.code, e.value.attempt) == ("unresolved", attempt)
+        b.reserve("intent", {"effect": D, "account": "bob", "nonce": "n3"}, NOW)     # another account: another scope
+        a.append("result", {"attempt": attempt, "effect": D, "account": "alice", "outcome": "performed"}, NOW)
+        with pytest.raises(Conflict) as e:       # the scope is free again, but approval n1 already made its attempt
+            b.reserve("intent", {"effect": D, "account": "alice", "nonce": "n1"}, NOW)
+        assert e.value.code == "replayed"
+        assert a.verify() == (True, None, "ok")
+    finally:
+        a.close()
+        b.close()
+
+
+def test_racing_threads_reserve_one_approval_once(tmp_path):
+    import threading
+    from casl.journal import Conflict
+    path = str(tmp_path / "j.sqlite")
+    Journal(path).close()
+    start, wins, lock = threading.Barrier(8), [], threading.Lock()
+
+    def racer():
+        j = Journal(path)
+        try:
+            start.wait()
+            j.reserve("approval", {"nonce": "n1"}, NOW)
+            with lock:
+                wins.append(1)
+        except Conflict:
+            pass
+        finally:
+            j.close()
+
+    threads = [threading.Thread(target=racer) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert len(wins) == 1

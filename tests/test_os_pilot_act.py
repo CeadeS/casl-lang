@@ -118,12 +118,12 @@ def test_3_timeout_produces_no_blind_repeat(tmp_path):
     h = Host(tmp_path)
     code, out = h.act(REQ, h.approve(REQ, "n1"), mock="unknown")
     assert code == 3 and out["status"] == "unknown", out
-    effect = out["effect"]["effect"]
+    attempt = out["effect"]["attempt"]
     # the same request again — even with a FRESH signed approval — is blocked until clarified
     code, out = h.act(REQ, h.approve(REQ, "n2"))
-    assert code == 1 and out["status"] == "unresolved", out
+    assert code == 1 and out["status"] == "unresolved" and out["effect"]["attempt"] == attempt, out
     # the host looked the task up at the target: it was not created
-    code, out = _run("resolve", "--journal", h.journal, "--effect", effect, "--outcome", "not_performed",
+    code, out = _run("resolve", "--journal", h.journal, "--attempt", str(attempt), "--outcome", "not_performed",
                      "--note", "GET /tasks/t-184-1 → 404")
     assert code == 0 and out["resolved"] is True, out
     code, out = h.act(REQ, h.approve(REQ, "n3"))
@@ -235,3 +235,61 @@ def test_credential_needs_an_identity(tmp_path):
     assert code == 0 and out["sign"]["account"] == "graph-work", out
     code, out = _run("prepare", *base, "--account", "graph-work")
     assert code == 2, out
+
+
+# -- issue #4: concurrent `casl act` processes on one journal ---------------------------------------------
+def _race(calls):
+    """Run the given act() thunks at the same moment; return their (code, out) results."""
+    import threading
+    start, results, lock = threading.Barrier(len(calls)), [], threading.Lock()
+
+    def one(call):
+        start.wait()
+        r = call()
+        with lock:
+            results.append(r)
+
+    threads = [threading.Thread(target=one, args=(c,)) for c in calls]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    return results
+
+
+def test_one_signed_approval_performs_once_across_twelve_processes(tmp_path):
+    h = Host(tmp_path)
+    signed = h.approve(REQ, "n1")
+    req_file = h.write("shared-req.json", REQ)
+
+    def act():
+        return _run("act", "--program", PROGRAM, "--site", "Create", "--request", req_file, "--approval", signed,
+                    "--approvers", h.approvers, "--journal", h.journal, "--allow-hosts", "tasks.example",
+                    "--mock-egress", "201")
+
+    results = _race([act] * 12)
+    performed = [out for code, out in results if code == 0]
+    assert len(performed) == 1 and performed[0]["status"] == "performed", [o.get("status") for _c, o in results]
+    assert all(out["consent"]["code"] == "replayed" for code, out in results if code != 0), results
+    kinds = h.kinds()
+    assert (kinds.count("approval"), kinds.count("intent"), kinds.count("result")) == (1, 1, 1), kinds
+
+
+def test_same_action_in_flight_blocks_other_approvals_across_processes(tmp_path):
+    """Twelve DIFFERENT approvals for the same request, raced, against a target that never answers: one
+    attempt goes out and ends unknown; the other eleven find it in the journal and do not send."""
+    h = Host(tmp_path)
+    req_file = h.write("shared-req.json", REQ)
+    approvals = [h.approve(REQ, f"n{i}") for i in range(12)]
+
+    def act(a):
+        return lambda: _run("act", "--program", PROGRAM, "--site", "Create", "--request", req_file, "--approval", a,
+                            "--approvers", h.approvers, "--journal", h.journal, "--allow-hosts", "tasks.example",
+                            "--mock-egress", "unknown")
+
+    results = _race([act(a) for a in approvals])
+    statuses = sorted(out["status"] for _code, out in results)
+    assert statuses == ["unknown"] + ["unresolved"] * 11, statuses
+    attempt = next(out["effect"]["attempt"] for _c, out in results if out["status"] == "unknown")
+    assert all(out["effect"]["attempt"] == attempt for _c, out in results), results
+    assert h.kinds().count("intent") == 1

@@ -75,11 +75,19 @@ Result: `{granted, token?, code, class?, account?, reason?}` with `code` one of 
 `sha256(json.dumps({"m","u","h","b"}, sort_keys=True, separators=(",", ":")))` (`h` = sorted `[k, v]` pairs,
 `m` upper-cased, ASCII-escaped). For a capability the broker performs, the result carries
 `outcome`: `performed` (2xx) · `rejected` (4xx) · `not_sent` · `unknown` (timeout, reset, other status), plus
-`effect` (= the request digest), `performed`, and `status`/`body`/`receipt` when a response arrived. A denial
-with `outcome: "unresolved"` means an earlier attempt of this exact request is still `unknown`.
+`request` (the digest), `performed`, `status`/`body`/`receipt` when a response arrived, and — for an
+irreversible capability — `attempt` (the id of this attempt) and `account` (the identity of the credential
+used). A denial with `outcome: "unresolved"` carries the `attempt` that blocks: an earlier attempt of this
+exact request under this account whose outcome is `unknown` or which is in flight. The blocking scope is
+(account, request digest); the same request under another account is not blocked.
 
-**`resolve`.** `{effect, outcome: "performed"|"not_performed", note}` → `{resolved, …}`. Records the outcome
-clarified at the target system; only then can the request be attempted again (with a new approval).
+**`resolve`.** `{attempt, outcome: "performed"|"not_performed", note}` → `{resolved, attempt, request,
+account?, outcome}`. Records the outcome clarified at the target system; only then can the request be
+attempted again (with a new approval). Only the latest unknown attempt of a scope can be resolved.
+
+**Reservations.** Using an approval (nonce), starting an attempt and resolving one are written to the
+journal only if its state — replayed inside the same write transaction — allows it. Broker processes
+sharing a journal therefore cannot both use one approval or both send the same in-flight request.
 
 **Journal.** Every signed approval, every irreversible intent (before the send) and its result are appended
 to the broker-owned journal (`src/casl/journal.py` documents the format).

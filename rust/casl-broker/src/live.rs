@@ -185,6 +185,7 @@ mod tests {
             if let Ok((mut s, _)) = l.accept() {
                 // read the WHOLE request: headers, then `content-length` bytes of body (they may
                 // arrive in separate segments)
+                let _ = s.set_read_timeout(Some(Duration::from_secs(5))); // a malformed request must not hang the test
                 let mut req: Vec<u8> = Vec::new();
                 let mut buf = [0u8; 8192];
                 loop {

@@ -89,7 +89,7 @@ host interface — one approved action through the broker (JSON on stdout; docs/
   act     --program F --site L --request R --approval A --approvers K --journal J --allow-hosts H
                                                  perform it     (0 performed / 1 denied / 3 not performed)
           [--auth-env VAR (--account ID | --account-from-token)]   broker-held credential + its identity
-  resolve --journal J --effect ID --outcome performed|not_performed   clarify an unknown outcome
+  resolve --journal J --attempt N --outcome performed|not_performed    clarify an unknown outcome
   journal verify J                               check the run journal            (0 intact / 1 broken)
 
 deferred to the Python `casl` (engines not yet ported to Rust):

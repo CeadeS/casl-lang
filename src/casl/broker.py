@@ -59,28 +59,25 @@ class Broker:
     program_hash: Optional[str] = None                             # the active program version approvals must name
     approval_class: Dict[str, str] = field(default_factory=dict)   # cap -> minimum approver class (default "human")
     clock: Any = None                                              # () -> unix seconds; None ⇒ time.time (test seam)
-    _nonces: set = field(default_factory=set)                      # used approval nonces (durable when a journal is set)
     # RUN JOURNAL (casl.journal): approvals, effect intents and results, hash-chained. With a journal the
-    # replay protection and the "unknown outcome" state survive a broker restart.
+    # replay protection and the "unknown outcome" state survive a restart and hold across concurrent broker
+    # processes; without one an in-memory ledger gives the same decisions for this process only.
     journal: Any = None
-    _effects: Dict[str, str] = field(default_factory=dict)         # request digest -> latest outcome of an irreversible effect
+    _ledger: Any = None
+    _initialized: bool = False
 
     def __post_init__(self):
-        if self.journal is not None:
-            nonces, effects = self.journal.replay()
-            self._nonces |= nonces
-            self._effects.update(effects)
+        from casl import journal as _j
+        self._ledger = self.journal if self.journal is not None else _j.MemoryLedger()
 
     def _now(self) -> int:
         import time
         return int(self.clock() if self.clock else time.time())
 
-    def _log(self, kind: str, body: dict) -> None:
-        """Append to the run journal. A failed append RAISES — callers log BEFORE acting, so an effect that
+    def _log(self, kind: str, body: dict) -> int:
+        """Append to the ledger. A failed append RAISES — callers log BEFORE acting, so an effect that
         cannot be journaled is not performed (fail closed)."""
-        if self.journal is not None:
-            self.journal.append(kind, body, self._now())
-    _initialized: bool = False
+        return self._ledger.append(kind, body, self._now())
 
     # -- JSON-RPC dispatch (transport-agnostic) --------------------------------
     def handle(self, req: dict) -> dict:
@@ -167,11 +164,11 @@ class Broker:
                 return {"allowed": False, "tool": tool, "site": site,
                         "reason": f"request denied: header {held!r} is held by the broker and must not be "
                                   f"supplied by the caller"}
-            if irreversible and self._effects.get(digest) == "unknown":
-                # NO BLIND REPEAT: an earlier attempt of this exact request may have reached the target.
-                return {"allowed": False, "tool": tool, "site": site, "outcome": "unresolved",
-                        "reason": "an earlier attempt of this exact request has an unknown outcome — "
-                                  "clarify it at the target system and `resolve` it before retrying"}
+            blocking = self._ledger.state().blocking(mc.account, digest) if irreversible else None
+            if blocking is not None:
+                # NO BLIND REPEAT: an earlier attempt of this exact request, under this account, may have
+                # reached the target. (The same request under another account is another resource.)
+                return self._unresolved(tool, site, blocking, mc.account)
         # (A) approval-binding: an IRREVERSIBLE capability needs a fresh, broker-minted consent token bound
         # to this (cap, site) — minted only via `consent` after the human approval gate. No / already-used /
         # mismatched token ⇒ DENY. A forgotten approval gate therefore FAILS CLOSED, never performs the effect.
@@ -198,11 +195,19 @@ class Broker:
             if mc is None:
                 self._log("grant", {"cap": tool, "site": site, "request": rec.get("request"), "nonce": nonce})
             else:
-                # INTENT before the send, durably: if the broker dies after this line, the journal still says
-                # the request may have gone out (replay reads an intent without a result as "unknown").
-                self._log("intent", {"effect": digest, "cap": tool, "site": site, "nonce": nonce,
-                                     "account": rec.get("account")})
-                self._effects[digest] = "unknown"
+                # INTENT before the send, durably, and as a RESERVATION: the journal re-checks under its write
+                # lock that this scope is not in flight and this approval made no attempt yet — so of several
+                # broker processes only one proceeds. If the broker dies after this line, the journal still
+                # says the request may have gone out (an intent without a result replays as "unknown").
+                from casl import journal as _j
+                try:
+                    attempt = self._ledger.reserve("intent", {"effect": digest, "cap": tool, "site": site,
+                                                              "nonce": nonce, "account": mc.account}, self._now())
+                except _j.Conflict as c:
+                    if c.code == "unresolved":
+                        return self._unresolved(tool, site, c.attempt, mc.account)
+                    return {"allowed": False, "tool": tool, "site": site,
+                            "reason": "this approval was already used for an attempt (one approval, one attempt)"}
             rec["used"] = True                            # one-shot: a token authorizes exactly ONE attempt
         if mc is None:
             return {"allowed": True, "tool": tool, "site": site,
@@ -217,32 +222,50 @@ class Broker:
             outcome = e.kind
         except Exception:                                 # a transport that fails in an unforeseen way
             outcome = "unknown"                           # proves nothing about the request's fate
+        out = {"allowed": True, "performed": outcome == "performed", "tool": tool, "site": site,
+               "outcome": outcome, "request": digest}
         if irreversible:
             import hashlib
-            self._effects[digest] = outcome
-            self._log("result", {"effect": digest, "outcome": outcome, "status": status,
+            self._log("result", {"attempt": attempt, "effect": digest, "account": mc.account, "outcome": outcome,
+                                 "status": status,
                                  "body_sha256": hashlib.sha256(body.encode("utf-8")).hexdigest() if body is not None else None})
-        out = {"allowed": True, "performed": outcome == "performed", "tool": tool, "site": site,
-               "outcome": outcome, "effect": digest}
+            out["attempt"] = attempt                      # the handle for `resolve`
+            if mc.account is not None:
+                out["account"] = mc.account
         if status is not None:
             out.update({"status": status, "body": body, "receipt": {"request": digest, "status": status}})
         return out
 
+    def _unresolved(self, tool: str, site: str, attempt, account) -> dict:
+        out = {"allowed": False, "tool": tool, "site": site, "outcome": "unresolved", "attempt": attempt,
+               "reason": f"attempt {attempt} of this exact request has an unknown outcome or is in flight — "
+                         f"clarify it at the target system and `resolve` it before retrying"}
+        if account is not None:
+            out["account"] = account
+        return out
+
     def _resolve(self, params: dict) -> dict:
-        """Record the clarified outcome of an effect whose outcome was unknown. Whether the target acted is a
-        fact of the TARGET system (the provider looks it up there); this only records the finding, so the
-        journal stays complete and a retry — which needs a NEW approval anyway — is no longer blocked."""
+        """Record the clarified outcome of an ATTEMPT whose outcome was unknown. Whether the target acted is a
+        fact of the TARGET system (the provider looks it up there, under the attempt's account); this records
+        the finding, so the journal stays complete and a retry — which needs a NEW approval anyway — is no
+        longer blocked. Addressed by attempt id: it cannot land on another account's attempt."""
         if not self._initialized:
             raise _BrokerError(-32002, "broker not initialized (call initialize first)")
-        effect = str(params.get("effect", ""))
-        outcome = str(params.get("outcome", ""))
+        from casl import journal as _j
+        attempt, outcome = params.get("attempt"), str(params.get("outcome", ""))
         if outcome not in ("performed", "not_performed"):
             return {"resolved": False, "reason": "outcome must be 'performed' or 'not_performed'"}
-        if self._effects.get(effect) != "unknown":
-            return {"resolved": False, "reason": "no effect with an unknown outcome under this id"}
-        self._log("resolve", {"effect": effect, "outcome": outcome, "note": str(params.get("note", ""))})
-        self._effects[effect] = outcome
-        return {"resolved": True, "effect": effect, "outcome": outcome}
+        if type(attempt) is not int:
+            return {"resolved": False, "reason": "attempt must be the integer id an effect result reported"}
+        body = {"attempt": attempt, "outcome": outcome, "note": str(params.get("note", ""))}
+        try:
+            self._ledger.reserve("resolve", body, self._now())
+        except _j.Conflict:
+            return {"resolved": False, "reason": "no attempt with an unknown outcome under this id"}
+        out = {"resolved": True, "attempt": attempt, "outcome": outcome, "request": body["effect"]}
+        if body["account"] is not None:
+            out["account"] = body["account"]
+        return out
 
     def _consent(self, params: dict) -> dict:
         """Mint a ONE-SHOT consent token bound to (cap, site) — the runtime form of the approval gate
@@ -272,14 +295,21 @@ class Broker:
                                   f"configure its account so approvals can name it"}
             ok, code, reason, payload, klass = _ap.verify_signed(
                 env, approvers=self.approvers, program=self.program_hash, cap=cap, site=site,
-                now=self._now(), seen_nonces=self._nonces, required=self.approval_class.get(cap, "human"),
+                now=self._now(), seen_nonces=set(self._ledger.state().nonces),
+                required=self.approval_class.get(cap, "human"),
                 account=account)
             if not ok:
                 return {"granted": False, "code": code, "reason": reason}
-            # journal the verified approval (payload + signature ⇒ re-verifiable later) BEFORE minting
-            self._log("approval", {"nonce": payload["nonce"], "cap": cap, "site": site, "request": payload["request"],
-                                   "program": payload["program"], "exp": payload["exp"], "key": env["key"].lower(),
-                                   "class": klass, "account": account, "payload": env["payload"], "sig": env["sig"]})
+            # journal the verified approval (payload + signature ⇒ re-verifiable later) BEFORE minting — as a
+            # RESERVATION of the nonce: of several broker processes holding the same approval, one wins
+            from casl import journal as _j
+            try:
+                self._ledger.reserve("approval", {
+                    "nonce": payload["nonce"], "cap": cap, "site": site, "request": payload["request"],
+                    "program": payload["program"], "exp": payload["exp"], "key": env["key"].lower(),
+                    "class": klass, "account": account, "payload": env["payload"], "sig": env["sig"]}, self._now())
+            except _j.Conflict:
+                return {"granted": False, "code": "replayed", "reason": "this approval was already used"}
             token = secrets.token_hex(16)
             self._consents[token] = {"cap": cap, "site": site, "request": payload["request"],
                                      "nonce": payload["nonce"], "account": account, "used": False}
