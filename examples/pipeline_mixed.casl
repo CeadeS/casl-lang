@@ -1,0 +1,24 @@
+// =============================================================================
+// pipeline_mixed.casl — pipeline of two node kinds (LH-F-011, CASL-IDE Phase 4)
+// =============================================================================
+// A small pipeline: U gives a task, P is a VERIFIED (deterministic)
+// program that prepares the input, Q is an LLM BOX whose response is checked
+// against a Contract at the monitored boundary.
+//
+//   · P→Q:Prepared  ⟨verified⟩  — producer is a verified program (inside the hull).
+//   · Q→U:Answer     ⟨oracle⟩ [cost <= 100] — opaque LLM box, WITH a Contract (monitored boundary).
+//
+// `casl check` accepts this (pipeline-safe: oracle monitored, oracle⊕verified exclusive).
+// In the IDE the `verified` node additionally requires HUMAN attestation (Tier 3) —
+// the machine cannot prove an arbitrary external program (W17).
+//
+//   ./casl check examples/pipeline_mixed.casl     # ✓ accepted
+// =============================================================================
+protocol PipelineMixed {
+  roles U, P, Q;
+  agent Q caps { llm(prompt) scope "gen" mode read ttl 1 sig "q1"; }
+
+  U -> P : Task(spec: Str);
+  P -> Q : Prepared(data: Str) verified;
+  Q -> U : Answer(text: Str, cost: Int) [cost <= 100] uses llm oracle;
+}

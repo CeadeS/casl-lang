@@ -1,0 +1,18 @@
+// ATTACK M2 (Red-Team v0.1.27): approve once, then send unboundedly in the loop.
+// `casl check` MUST reject (consent does not carry across loop iterations —
+// the effect-bearing action in the loop is not approved per iteration).
+protocol ApproveOnceSpam {
+  roles S, U, M;
+  agent S caps { mail(to) scope "mail:send" ttl 1 sig "s1"; }
+  S -> U : Plan(n: Int);
+  choice approval at U -> S {
+    Approve consent: {
+      rec Loop {
+        S -> M : SendEmail() uses mail;
+        S -> U : Tick();
+        continue Loop;
+      }
+    }
+    Deny: { S -> U : Stopped(); }
+  }
+}

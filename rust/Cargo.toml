@@ -1,0 +1,14 @@
+# CASL Rust runtime workspace (docs/engineering-plan.md). Pure-Rust default (decisions: §8).
+# Members grow per phase: P0 casl-proto; P1 casl-broker; P2 casl-host; ... .
+[workspace]
+resolver = "2"
+members = ["casl-proto", "casl-broker", "casl-host", "casl-core", "casl-surface", "casl-check", "casl-project", "casl-conductor", "casl-cli"]
+
+[workspace.package]
+edition = "2021"
+version = "0.1.0"
+license = "MIT"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

@@ -1,0 +1,20 @@
+// =============================================================================
+// concurrent.casl — true concurrency (LH-Q-001d), certified
+// =============================================================================
+// Two role-DISJOINT communications: P→Q and R→S share no role, so they are
+// independent and commute (diamond/confluence). Written sequentially,
+// but the endpoints may execute them in any order.
+//
+// `casl check` accepts this only because the global semantics (with the swap rule)
+// fully captures this concurrent behavior ('certified'). Concurrency that
+// the (soundly under-approximating) global semantics does not capture would be rejected —
+// deny-by-default, when in doubt, check.
+//
+//   ./casl check examples/concurrent.casl     # ✓ accepted (4 roles, concurrent)
+// =============================================================================
+protocol Concurrent {
+  roles P, Q, R, S;
+
+  P -> Q : Ping();
+  R -> S : Log();
+}

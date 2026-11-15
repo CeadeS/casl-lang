@@ -1,0 +1,44 @@
+// =============================================================================
+// email_assistant.casl — email assistant as an EVENT STREAM (4 roles)
+// =============================================================================
+// Env = inbox (external source), S = assistant (agent/ORACLE),
+// U = User, M = mail connector.
+//
+// For each incoming mail, S drafts a reply via LLM (compose capability,
+// mode read → pure text generation is NOT effect-bearing; the Contract
+// [size <= cap] bounds the length). The SEND, by contrast, is irreversible
+// (uses send, mode write) and lies in the consent branch of an approval gate.
+// The `stream` runs deliberately unbounded, but every handler terminates.
+//
+// Note: the draft here is pure tool use (uses compose), NOT an `oracle`
+// promise. Reason: an oracle promise must be resolved EXACTLY ONCE per loop
+// iteration (promise linearity); in the Quit branch, however, nothing is
+// drafted → 0 times. The monitored oracle boundary is shown by summarize/budgeted_qa.
+//
+//   ./casl check examples/email_assistant.casl
+//   ./casl run   examples/email_assistant.casl --approve
+// =============================================================================
+protocol EmailAssistant {
+  roles Env, S, U, M;
+  env Env;
+  agent S caps {
+    compose(prompt) scope "llm:compose" mode read  ttl 1 sig "s0";
+    send(to)        scope "mail:send"   mode write ttl 1 sig "s1";
+  }
+
+  stream Loop {
+    choice at Env -> S {
+      Mail(subject: Str, cap: Int): {
+        S -> U : Draft(text: Str, size: Int) [size <= cap] uses compose;
+        choice approval at U -> S {
+          Send consent: { S -> M : Deliver() uses send irreversible; continue Loop; }
+          Skip:         { S -> M : Archive();                        continue Loop; }
+        }
+      }
+      Quit: {
+        S -> U : Bye();
+        S -> M : Closed();
+      }
+    }
+  }
+}

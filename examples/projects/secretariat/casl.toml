@@ -1,0 +1,52 @@
+name = "secretariat"
+version = "0.1.0"
+
+# Recorded human signing identity (LH-Q-018). The PUBLIC key / key-id lives here
+# (committed, CODEOWNERS-guarded); the PRIVATE key stays in your gpg/ssh agent —
+# never in the repo. A human signs AS a human; a local agent must not be able to
+# read and reuse the key.
+[attest]
+pubkey = ".casl/attest.pub"
+
+# ---------------------------------------------------------------------------
+# Four artifacts, one per class. `kind` is STRUCTURED + validated (LH-F-013) —
+# never inferred from a name. The trace regime follows OWNERSHIP (LH-P-009):
+# owned ⇒ full line-trace, external ⇒ burden (pinned, not line-traced).
+# ---------------------------------------------------------------------------
+
+# 1. DEPENDENCY (burden). An imported library we cannot verify. Pinned + accepted
+#    in deps.lock, contained at runtime by the capability cage. Floors at G3.
+[[artifact]]
+name        = "imap_client"
+kind        = "external"
+requirement = "LH-LOCAL-001"
+grade       = "G3"
+
+# 2. VERIFIED (proof). A decidable predicate: no calendar slot is double-booked.
+#    Discharged by PROOF — needs NO human signature; can reach G0.
+[[artifact]]
+name        = "conflict_check"
+kind        = "verified"
+requirement = "LH-LOCAL-002"
+grade       = "G0"
+body        = "artifacts/conflict_check.py"
+
+# 3. GENERATED (owned, LLM-written). We committed it, so WE own it: fully
+#    line-traced + a content-bound HUMAN signature (attestations/draft_reply.json).
+#    Advisory (G3): the gate never proves the text is "good"; a human is
+#    accountable for exactly this content, and the send is approval-gated.
+[[artifact]]
+name        = "draft_reply"
+kind        = "generated"
+requirement = "LH-LOCAL-003"
+grade       = "G3"
+body        = "artifacts/draft_reply.py"
+
+# 4. ORACLE (live LLM call behind an owned wrapper). The wrapper is line-traced;
+#    the call is a MONITORED oracle, checked at the boundary. Also human-attested.
+[[artifact]]
+name        = "classify_importance"
+kind        = "oracle"
+requirement = "LH-LOCAL-004"
+grade       = "G3"
+body        = "artifacts/classify_importance.py"

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# CASL front-end shim.  Usage:  ./casl check examples/budgeted_qa.casl
+# Runs the package from ./src without requiring a pip install.
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec env PYTHONPATH="$HERE/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m casl.check "$@"

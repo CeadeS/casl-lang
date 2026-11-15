@@ -1,0 +1,6 @@
+# Put your signing identity's PUBLIC key / key-id here (committed, CODEOWNERS-guarded).
+# The PRIVATE key stays in your gpg/ssh agent — NEVER in the repo. A human signs AS a
+# human: a local agent must not be able to read and reuse this identity.
+#
+# Example (SSH-signing key id):
+#   ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... martin@example.org

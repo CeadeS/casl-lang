@@ -1,0 +1,14 @@
+[package]
+name = "casl-conductor"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+# The deterministic interpreter walks the PARSED choreography (casl-surface). Zero external runtime deps;
+# the live-LLM/broker-dispatch paths are out of this crate (key-gated; the Rust broker is a separate crate
+# already at parity). serde_json is DEV-only for the run-trace differential.
+[dependencies]
+casl-surface = { path = "../casl-surface" }
+
+[dev-dependencies]
+serde_json.workspace = true

@@ -1,0 +1,13 @@
+[package]
+name = "casl-check"
+version = "0.1.0"
+edition = "2021"
+description = "CASL static checker, end-to-end (.casl text -> MUST-check verdicts) — strangler-fig brick 2 (CEP-0081). Bridges the casl-surface AST to casl-core and reuses its well-formedness + Least-Privilege capability containment; pinned to the Python reference by a verdict differential."
+license = "Apache-2.0"
+
+[dependencies]
+casl-surface = { path = "../casl-surface" }
+casl-core = { path = "../casl-core" }
+
+[dev-dependencies]
+serde_json = "1"   # test-only: read the single-sourced verdict corpus

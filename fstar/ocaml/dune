@@ -1,0 +1,10 @@
+; Builds the F*-extracted CASL core (CASL.ml, generated) + two drivers, linked against the
+; F* OCaml runtime (fstar.lib):
+;   driver.exe  — runs `wellformed` over the bridge corpus (`make -C fstar tcb-bridge`).
+;   wf_one.exe  — runs `wellformed` on ONE protocol; the AUTHORITATIVE core judgment for the
+;                 CLI (SP-2 / C1). wf_one.ml is regenerated per invocation by src/casl/authoritative.py.
+(executables
+ (names driver wf_one)
+ (modules driver wf_one CASL)
+ (libraries fstar.lib)
+ (flags (:standard -w -a)))   ; generated code: warnings are not errors

@@ -1,0 +1,13 @@
+[package]
+name = "casl-project"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+# Runtime dep: casl-surface (the typed seam binds manifest artifacts to PARSED choreography sites). The
+# manifest + dependency readers stay zero-external-dep hand-written parsers (LH-Q-020). serde_json is DEV-only.
+[dependencies]
+casl-surface = { path = "../casl-surface" }
+
+[dev-dependencies]
+serde_json.workspace = true

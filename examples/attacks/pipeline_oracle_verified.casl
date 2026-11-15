@@ -1,0 +1,14 @@
+// =============================================================================
+// ATTACK: node is both oracle AND verified (R1 violation, LH-F-011)
+// =============================================================================
+// A marks its response as `oracle` (opaque) AND `verified` (proven) at the same time —
+// a contradiction with which one tried to bypass the monitored boundary of an LLM box
+// (disguise as "verified"). `casl check` MUST reject this (pipeline_safe R1);
+// an opaque box cannot also be a verified program.
+// =============================================================================
+protocol PipelineOracleVerified {
+  roles C, A;
+
+  C -> A : Ask(q: Str);
+  A -> C : Result(answer: Str) [len(answer) > 0] oracle verified;
+}

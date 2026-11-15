@@ -1,0 +1,11 @@
+// INTENTIONALLY FAULTY — demonstration of the capability diagnostics.
+// A holds only the capability `search` but uses `delete` → least-privilege
+// violation (MUST). `casl check` MUST reject with exit 1.
+protocol CapViolation {
+  roles C, A, J;
+  agent A caps { search(query) scope "web:readonly" ttl 3 sig "sig-A1"; }
+
+  C -> A : Request(question: Str, budget: Int);
+  A -> J : Draft(answer: Str, cost: Int) [cost <= budget] uses delete oracle;
+  J -> A : Done();
+}

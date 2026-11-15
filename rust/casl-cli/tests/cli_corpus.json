@@ -1,0 +1,235 @@
+[
+  {
+    "argv": [
+      "check",
+      "p.casl"
+    ],
+    "exit": 0,
+    "files": {
+      "p.casl": "protocol Lin {\n  roles A, J;\n  A -> J : M();\n  J -> A : N();\n}\n"
+    },
+    "id": "check_linear_ok"
+  },
+  {
+    "argv": [
+      "check",
+      "p.casl"
+    ],
+    "exit": 0,
+    "files": {
+      "p.casl": "protocol Q {\n  roles A, J, C;\n  rec Loop {\n    A -> J : Draft(cost: Int) [cost <= budget] oracle;\n    choice at J -> C {\n      Accept: { J -> A : Done(); }\n      Reject: { J -> A : Retry(); continue Loop; }\n    }\n  }\n}\n"
+    },
+    "id": "check_budget_ok"
+  },
+  {
+    "argv": [
+      "check",
+      "p.casl"
+    ],
+    "exit": 1,
+    "files": {
+      "p.casl": "protocol Bad {\n  roles A, J;\n  A -> J : Act() uses search;\n}\n"
+    },
+    "id": "check_capviol_reject"
+  },
+  {
+    "argv": [
+      "check",
+      "p.casl"
+    ],
+    "exit": 2,
+    "files": {
+      "p.casl": "this is not a protocol\n"
+    },
+    "id": "check_parse_error"
+  },
+  {
+    "argv": [
+      "check",
+      "nope.casl"
+    ],
+    "exit": 2,
+    "files": {},
+    "id": "check_missing_file"
+  },
+  {
+    "argv": [
+      "check",
+      "p.casl",
+      "--json"
+    ],
+    "exit": 0,
+    "files": {
+      "p.casl": "protocol Lin {\n  roles A, J;\n  A -> J : M();\n  J -> A : N();\n}\n"
+    },
+    "id": "check_json_ok"
+  },
+  {
+    "argv": [
+      "run",
+      "p.casl",
+      "--scenario",
+      "ok"
+    ],
+    "exit": 0,
+    "files": {
+      "p.casl": "protocol Q {\n  roles A, J, C;\n  rec Loop {\n    A -> J : Draft(cost: Int) [cost <= budget] oracle;\n    choice at J -> C {\n      Accept: { J -> A : Done(); }\n      Reject: { J -> A : Retry(); continue Loop; }\n    }\n  }\n}\n"
+    },
+    "id": "run_budget_ok"
+  },
+  {
+    "argv": [
+      "run",
+      "p.casl",
+      "--scenario",
+      "overspend"
+    ],
+    "exit": 3,
+    "files": {
+      "p.casl": "protocol Q {\n  roles A, J, C;\n  rec Loop {\n    A -> J : Draft(cost: Int) [cost <= budget] oracle;\n    choice at J -> C {\n      Accept: { J -> A : Done(); }\n      Reject: { J -> A : Retry(); continue Loop; }\n    }\n  }\n}\n"
+    },
+    "id": "run_budget_overspend"
+  },
+  {
+    "argv": [
+      "run",
+      "p.casl",
+      "--scenario",
+      "ok"
+    ],
+    "exit": 0,
+    "files": {
+      "p.casl": "protocol Lin {\n  roles A, J;\n  A -> J : M();\n  J -> A : N();\n}\n"
+    },
+    "id": "run_linear_ok"
+  },
+  {
+    "argv": [
+      "run",
+      "p.casl",
+      "--scenario",
+      "ok"
+    ],
+    "exit": 1,
+    "files": {
+      "p.casl": "protocol Bad {\n  roles A, J;\n  A -> J : Act() uses search;\n}\n"
+    },
+    "id": "run_capviol_reject"
+  },
+  {
+    "argv": [
+      "project",
+      "proj"
+    ],
+    "exit": 0,
+    "files": {
+      "proj/casl.toml": "name = \"demo\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"checker\"\nkind = \"verified\"\nrequirement = \"R1\"\ngrade = \"G0\"\nbody = \"artifacts/checker.py\"\nimplements = \"Demo:Verify\"\n",
+      "proj/casl/demo.casl": "protocol Demo {\n  roles A, J;\n  A -> J : Verify(x: Int) verified;\n}\n"
+    },
+    "id": "project_ok"
+  },
+  {
+    "argv": [
+      "project",
+      "empty"
+    ],
+    "exit": 2,
+    "files": {
+      "empty/.keep": ""
+    },
+    "id": "project_missing"
+  },
+  {
+    "argv": [
+      "deps",
+      "proj"
+    ],
+    "exit": 0,
+    "files": {
+      "proj/deps.lock": "imap_client 3.0.1 sha256:6f1ed002ab5595859014ebf0951522d9a455eb9b8d1f9f0e2f1e0a0e3b6c7d8e accepted-by:Martin date:2026-06-24\n"
+    },
+    "id": "deps_ok"
+  },
+  {
+    "argv": [
+      "deps",
+      "proj"
+    ],
+    "exit": 1,
+    "files": {
+      "proj/deps.lock": "foo 1.0 nothash accepted-by:Martin\n"
+    },
+    "id": "deps_bad"
+  },
+  {
+    "argv": [
+      "seam",
+      "proj"
+    ],
+    "exit": 0,
+    "files": {
+      "proj/casl.toml": "name = \"demo\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"checker\"\nkind = \"verified\"\nrequirement = \"R1\"\ngrade = \"G0\"\nbody = \"artifacts/checker.py\"\nimplements = \"Demo:Verify\"\n",
+      "proj/casl/demo.casl": "protocol Demo {\n  roles A, J;\n  A -> J : Verify(x: Int) verified;\n}\n"
+    },
+    "id": "seam_ok"
+  },
+  {
+    "argv": [
+      "seam",
+      "proj"
+    ],
+    "exit": 1,
+    "files": {
+      "proj/casl.toml": "name = \"demo\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"checker\"\nkind = \"verified\"\nrequirement = \"R1\"\ngrade = \"G0\"\nbody = \"artifacts/checker.py\"\nimplements = \"Demo:Nope\"\n",
+      "proj/casl/demo.casl": "protocol Demo {\n  roles A, J;\n  A -> J : Verify(x: Int) verified;\n}\n"
+    },
+    "id": "seam_violation"
+  },
+  {
+    "argv": [
+      "flow",
+      "proj"
+    ],
+    "exit": 0,
+    "files": {
+      "proj/casl.toml": "name = \"demo\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"checker\"\nkind = \"verified\"\nrequirement = \"R1\"\ngrade = \"G0\"\nbody = \"artifacts/checker.py\"\nimplements = \"Demo:Verify\"\n",
+      "proj/casl/demo.casl": "protocol Demo {\n  roles A, J;\n  A -> J : Verify(x: Int) verified;\n}\n"
+    },
+    "id": "flow_ok"
+  },
+  {
+    "argv": [
+      "check",
+      "p.casl"
+    ],
+    "exit": 0,
+    "files": {
+      "p.casl": "protocol GoodConc {\n  roles A, B, C, D;\n  A -> B : m();\n  C -> D : n();\n}\n"
+    },
+    "id": "check_conc_certified"
+  },
+  {
+    "argv": [
+      "check",
+      "p.casl"
+    ],
+    "exit": 1,
+    "files": {
+      "p.casl": "protocol BadConc {\n  roles P, Q, R, S;\n  P -> Q : a();\n  rec t {\n    R -> S : b();\n    continue t;\n  }\n}\n"
+    },
+    "id": "check_conc_incomplete"
+  },
+  {
+    "argv": [
+      "run",
+      "p.casl",
+      "--scenario",
+      "ok"
+    ],
+    "exit": 0,
+    "files": {
+      "p.casl": "protocol GoodConc {\n  roles A, B, C, D;\n  A -> B : m();\n  C -> D : n();\n}\n"
+    },
+    "id": "run_conc_certified"
+  }
+]

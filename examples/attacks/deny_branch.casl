@@ -1,0 +1,11 @@
+// ATTACK C1 (Red-Team v0.1.27): the irreversible action lies in the NON-approving
+// Deny branch. `casl check` MUST reject (approval dominance over the consent branch).
+protocol DenyBranchAttack {
+  roles S, U, K;
+  agent S caps { calendar(event) scope "cal:write" ttl 1 sig "s1"; }
+  S -> U : Conflict(detail: Str);
+  choice approval at U -> S {
+    Approve consent: { S -> K : Skip(); }
+    Deny:            { S -> K : Move() uses calendar irreversible; }
+  }
+}

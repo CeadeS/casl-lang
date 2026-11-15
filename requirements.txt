@@ -1,0 +1,5 @@
+# CASL — Kern-Abhängigkeiten (Python ≥ 3.9).
+#   pip install -r requirements.txt          (oder: ./scripts/install.sh)
+# Alles Übrige ist Python-Standardbibliothek. Der MCP-Server der IDE braucht zusätzlich
+# `mcp` und Python ≥ 3.10 — siehe requirements-ide.txt.
+z3-solver>=4.12

@@ -1,0 +1,9 @@
+{
+  "artifact": "draft_reply",
+  "sha256": "sha256:b0f287fafcfcfe45b054469bafc9a3b7ca47966c9f47b805665f8f1a842c0f95",
+  "requirement": "LH-LOCAL-003",
+  "producer": "llm",
+  "signer": "Martin",
+  "sig_kind": "git",
+  "ts": "2026-06-24T09:00:00Z"
+}

@@ -1,0 +1,30 @@
+// =============================================================================
+// expense_approval.casl — expense approval (3 roles, classic business flow)
+// =============================================================================
+// A = assistant (agent/ORACLE), U = User/approver, L = Ledger (accounting system).
+//
+// Flow:
+//   1. U submits a receipt and states a limit.
+//   2. A reads the receipt (read capability, NOT effect-bearing) and extracts
+//      the amount via LLM. The data Contract [amount <= limit] MUST hold.
+//   3. The BOOKING is irreversible (uses ledger, mode write) and therefore lies
+//      in the consent branch of an approval gate. L sees in BOTH branches a
+//      distinguishing label (Book/Discard) → projectable.
+//
+//   ./casl check examples/expense_approval.casl
+//   ./casl run   examples/expense_approval.casl --approve
+// =============================================================================
+protocol ExpenseApproval {
+  roles U, A, L;
+  agent A caps {
+    read(receipt)  scope "doc:readonly"  mode read  ttl 1 sig "a0";
+    ledger(entry)  scope "ledger:write"  mode write ttl 1 sig "a1";
+  }
+
+  U -> A : Submit(receipt: Str, limit: Int);
+  A -> U : Claim(amount: Int) [amount <= limit] uses read oracle;
+  choice approval at U -> A {
+    Approve consent: { A -> L : Book() uses ledger irreversible; }
+    Deny:            { A -> L : Discard(); }
+  }
+}

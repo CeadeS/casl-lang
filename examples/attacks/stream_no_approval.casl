@@ -1,0 +1,15 @@
+// ATTACK (Self-Red-Team v0.7.4) — interaction stream × approval:
+// an EFFECT-BEARING action (Send, uses mail) in the handler of a `stream` loop WITHOUT
+// an approval gate. `casl check` MUST reject — approval dominance (LH-Q-011) applies
+// PER HANDLER, even within a stream (otherwise an inbox could send unprompted).
+protocol StreamNoApproval {
+  roles Env, S, M;
+  env Env;
+  agent S caps { mail(to) scope "mail:send" mode write ttl 1 sig "s1"; }
+  stream Loop {
+    choice at Env -> S {
+      Mail(subject: Str): { S -> M : Send() uses mail; continue Loop; }
+      Quit: { S -> M : Bye(); }
+    }
+  }
+}

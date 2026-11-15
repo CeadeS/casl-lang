@@ -1,0 +1,24 @@
+// =============================================================================
+// async_fanin_bad.casl — REJECTED: reorder trap on fan-in (LH-F-010)
+// =============================================================================
+// C asks A and B and expects the responses in the order A, then B —
+// but both write into C's ONE inbox, and B may answer first. Then
+// B's `ResB` sits at the inbox head, yet C expects `ResA` from A → C is blocked, no
+// reordering → DEADLOCK. Exactly the trap that async introduces: responses do
+// NOT come back in request order, guaranteed.
+//
+// Synchronously this protocol would be well-formed — the async gate rejects it
+// (deny-by-default) because ONE interleaving deadlocks. Remedy: keep it synchronous,
+// or restructure so that C accepts both orderings.
+//
+//   ./casl check examples/async_fanin_bad.casl   # ✗ async-rejected (reorder/deadlock)
+// =============================================================================
+protocol AsyncFaninBad {
+  roles C, A, B;
+  async k 2;
+
+  C -> A : Req();
+  C -> B : Req();
+  A -> C : ResA();
+  B -> C : ResB();
+}

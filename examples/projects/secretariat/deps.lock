@@ -1,0 +1,10 @@
+# dependency burden ledger (LH-Q-020): name version sha256 accepted-by date
+#
+# An imported library is a liability we ACCEPT and CARRY. We do not verify its body
+# or line-trace it — that would be dishonest for code we did not write. We make the
+# trust VISIBLE and OWNED: version+hash pinned (supply-chain drift becomes
+# detectable), and a named human who accepted the burden. A hash change EXPIRES the
+# acceptance (re-accept required). Runtime containment is the capability cage.
+#
+# NOTE: the hash below is illustrative. Pin the real wheel/sdist hash in practice.
+imap_client 3.0.1 sha256:6f1ed002ab5595859014ebf0951522d9a455eb9b8d1f9f0e2f1e0a0e3b6c7d8e accepted-by:Martin date:2026-06-24

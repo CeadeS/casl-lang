@@ -1,0 +1,10 @@
+// ATTACK R-H1 (b) — SPOOF (Red-Team v0.1.28): destructive tool with a misleading scope.
+// The old substring test trusted any scope containing "readonly" — including `db:readonly`
+// on a `purge` tool. `casl check` MUST reject: the scope is descriptive and never
+// security-decisive; without `mode read` the default is `write` → effect-bearing → approval required.
+protocol DeleteReadonly {
+  roles S, U, D;
+  agent S caps { purge(id) scope "db:readonly" ttl 1 sig "s1"; }
+  S -> U : Notice(detail: Str);
+  S -> D : Purge() uses purge;
+}

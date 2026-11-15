@@ -1,0 +1,15 @@
+[package]
+name = "casl-core"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+description = "CASL reference core in Rust — the F*-faithful global-type IR, projection, hardened merge, and well-formedness (contractive ∧ no_self ∧ gdistinct ∧ closed ∧ projectable for {C,A,J,D}). Pinned to the F*-extracted kernel by a corpus differential (tests/differential.rs)."
+
+[lib]
+name = "casl_core"
+path = "src/lib.rs"
+
+# Pure-Rust library (no runtime deps — it is in the verifiability story). serde_json is dev-only: it parses
+# the shared corpus the conformance differential checks against.
+[dev-dependencies]
+serde_json = { workspace = true }

@@ -1,0 +1,21 @@
+[package]
+name = "casl-broker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "CASL capability broker — the reference monitor (Rust). Mediates all model/tool access behind the wire protocol."
+
+[dependencies]
+casl-proto = { path = "../casl-proto" }
+serde.workspace = true
+serde_json.workspace = true
+# Signed approvals (engineering-plan §8: dalek for signatures); sha2 for the request digest.
+ed25519-dalek = "2"
+sha2 = "0.10"
+# The run journal (decision 2026-11-15: SQLite, a broker-owned file). `bundled` = no system libsqlite needed.
+rusqlite = { version = "0.32", features = ["bundled"] }
+ureq = "3"
+
+[[bin]]
+name = "casl-broker"
+path = "src/main.rs"

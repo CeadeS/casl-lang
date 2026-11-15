@@ -1,0 +1,30 @@
+# CODEOWNERS — the CASL TRUST BASE (see proposals/cep-0004-integrity-assurance-case.md).
+#
+# These files DEFINE what counts as a requirement, a proof, an assurance level, or a verdict —
+# i.e. they are the trusted computing base. Changing them can weaken every guarantee, so they
+# REQUIRE human (owner) review: an AI or contributor may PROPOSE a change, but a human must
+# attest it. This is the reference-monitor "tamperproof" property made mechanical (GitHub blocks
+# merge of these paths without an owner's review).
+#
+# Owner: @CeadeS (https://github.com/CeadeS/casl-lang). NOTE: enforcement is only live once the repo is
+# pushed to GitHub AND branch protection on main requires CODEOWNERS review for these paths.
+
+# Deterministic checker, authority chain, living audit, level model
+/src/casl/spec.py          @CeadeS
+/src/casl/authority.py     @CeadeS
+/src/casl/audit.py         @CeadeS
+/src/casl/kernel/          @CeadeS
+/src/casl/cep.py           @CeadeS
+/src/casl/levels.py        @CeadeS
+/src/casl/check.py         @CeadeS
+
+# Machine-checked formal core
+/fstar/CASL.fst            @CeadeS
+
+# Requirement / assurance governance corpus
+/proposals/                @CeadeS
+
+# The gates themselves (must not be silently disabled)
+/.github/workflows/        @CeadeS
+/.github/CODEOWNERS        @CeadeS
+/scripts/check_admits.sh   @CeadeS

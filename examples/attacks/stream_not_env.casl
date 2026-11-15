@@ -1,0 +1,14 @@
+// ATTACK (Self-Red-Team v0.7.4) — stream without environment drive:
+// a `stream` loop whose dispatch choice is NOT chosen by an `env` role
+// (here S instead of an event source). `casl check` MUST reject (stream well-formedness,
+// LH-F-009): a stream must be driven by external events (productivity),
+// otherwise it is a disguised unbounded loop without a termination proof.
+protocol StreamNotEnv {
+  roles S, U;
+  stream Loop {
+    choice at S -> U {
+      Tick: { U -> S : Ack(); continue Loop; }
+      Stop: { U -> S : Done(); }
+    }
+  }
+}

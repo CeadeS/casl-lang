@@ -1,0 +1,35 @@
+// =============================================================================
+// inbox.casl — inbox as an EVENT STREAM (LH-F-009), target-picture slice
+// =============================================================================
+// Env = environment (external event source: new mail / quit), S = secretary,
+// U = User, M = mail connector.
+//
+// The `stream` loop runs DELIBERATELY unbounded (an inbox does not end on its
+// own) — but EVERY handler is finite and certified: the irreversible
+// send (uses mail) lies behind an approval gate (LH-Q-011), and every role
+// learns in every branch via a message from S which case applies (realizable).
+//
+//   ./casl check examples/inbox.casl              # ✓ accepted (stream, 4 roles)
+//   ./casl run   examples/inbox.casl --approve    # one event handled per iteration
+// =============================================================================
+protocol Inbox {
+  roles Env, S, U, M;
+  env Env;
+  agent S caps { mail(to) scope "mail:send" mode write ttl 1 sig "s1"; }
+
+  stream Loop {
+    choice at Env -> S {
+      Mail(subject: Str): {
+        S -> U : Notice(detail: Str);
+        choice approval at U -> S {
+          Approve consent: { S -> M : Send() uses mail; continue Loop; }
+          Deny:            { S -> M : Drop(); continue Loop; }
+        }
+      }
+      Quit: {
+        S -> U : Bye();
+        S -> M : Closed();
+      }
+    }
+  }
+}

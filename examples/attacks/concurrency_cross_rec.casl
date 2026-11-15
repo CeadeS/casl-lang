@@ -1,0 +1,13 @@
+// ATTACK (Self-Red-Team v0.7.4) — interaction concurrency × recursion:
+// P→Q and the rec body R→S are role-DISJOINT, but the concurrency crosses a
+// recursion. The global swap semantics does NOT capture this fully (soundly underestimating)
+// → classification `incomplete`. `casl check` MUST reject (concurrency gate,
+// deny-by-default: non-certifiable concurrency is not accepted, LH-Q-001d).
+protocol ConcCrossRec {
+  roles P, Q, R, S;
+  P -> Q : a();
+  rec L {
+    R -> S : b();
+    continue L;
+  }
+}

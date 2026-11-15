@@ -1,0 +1,10 @@
+// INTENTIONALLY FAULTY — demonstration of the approval invariant (LH-Q-011).
+// The irreversible `Move` (change the calendar) happens WITHOUT a preceding approval gate.
+// `casl check` MUST reject with exit 1 (approval dominance violated).
+protocol RescheduleBad {
+  roles S, U, K;
+  agent S caps { calendar(event) scope "cal:write" ttl 1 sig "s1"; }
+
+  S -> U : Conflict(detail: Str);
+  S -> K : Move() uses calendar irreversible;
+}

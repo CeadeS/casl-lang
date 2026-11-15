@@ -1,0 +1,17 @@
+// =============================================================================
+// async_request.casl — buffered request/response (LH-F-010), SYNC-EQUIVALENT
+// =============================================================================
+// The `async` marker adds the buffered refinement (opt-in). Without the
+// marker the protocol would stay synchronous (the proven default). Here only ONE
+// message is in flight at a time ⇒ the async behavior coincides with the
+// synchronous semantics ⇒ class `async-synchronizable` (inherits the proven guarantees).
+//
+//   ./casl check examples/async_request.casl     # ✓ async-synchronizable
+// =============================================================================
+protocol AsyncRequest {
+  roles C, A;
+  async k 1;
+
+  C -> A : Req();
+  A -> C : Res();
+}

@@ -1,0 +1,40 @@
+# Environment / secrets
+.env
+.env.*
+
+# Logs (run.sh output; reproducible, not versioned)
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# F* / extraction build artifacts
+*.checked
+*.checked.lax
+.cache/
+fstar/out/
+*.krml
+# generated extraction output (driver/dune stay versioned)
+fstar/ocaml/CASL.ml
+fstar/ocaml/_build/
+
+# Rust engine build artifacts (Cargo.lock IS versioned for the binary crate)
+engine/target/
+
+# OS
+.DS_Store
+
+# Dev tooling / build
+.venv/
+venv/
+build/
+dist/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+fstar/CASLProof.fst
+fstar/CASLProof.fst.checked

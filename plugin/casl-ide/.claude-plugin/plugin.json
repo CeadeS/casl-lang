@@ -1,0 +1,8 @@
+{
+  "name": "casl-ide",
+  "displayName": "CASL-IDE",
+  "version": "0.14.0",
+  "description": "Requirement-driven IDE: monotone, layered gate (Tier 0–3) over CASL. Exposes casl_check / casl_gate / casl_synthesize as MCP tools — checks/reports, never grants (boundary invariant).",
+  "keywords": ["casl", "verification", "requirements", "session-types", "mcp", "safety"],
+  "license": "MIT"
+}

@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "casl"
+dynamic = ["version"]
+description = "CASL — Choreographic Agent Specification Language: a typed, agent-oriented choreographic language to specify, verify, orchestrate and test parallel LLM agents (prove the deterministic hull, treat the LLM as a nondeterministic oracle)."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = ["session-types", "mpst", "llm-agents", "verification", "choreography", "mcp", "requirements-driven"]
+dependencies = [
+    "z3-solver>=4.12",
+]
+
+[project.optional-dependencies]
+# Compile-out / assurance levels (CEP-0003): the base install is already CORE-minimal — the advisory
+# features (oracle/synth/ide) use only the Python stdlib at runtime, and the core checker import pulls
+# no outer-ring module (tests/test_core_import.py + profiles.py). The only optional dep is the MCP SDK
+# for the `casl-mcp` server; `full` aggregates the advisory extras.
+# The MCP server (casl-mcp) requires the MCP SDK, which needs Python >= 3.10.
+ide = ["mcp>=1.0"]
+full = ["mcp>=1.0"]
+dev = ["pytest>=7", "ruff>=0.1", "mypy>=1.0"]
+
+[project.scripts]
+casl = "casl.check:main"
+casl-mcp = "casl.mcp:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = { attr = "casl.__version__" }
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

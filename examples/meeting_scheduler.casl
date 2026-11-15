@@ -1,0 +1,43 @@
+// =============================================================================
+// meeting_scheduler.casl — appointment finding with a retry loop + approval (3 roles)
+// =============================================================================
+// U = User, S = secretary (agent/ORACLE), K = calendar.
+//
+// S proposes a slot via LLM (plan capability, mode read) with Contract
+// [cost <= budget]. U accepts or rejects with a reason → new round
+// (rec with termination measure `measure maxTries bound 3`). In the Accept branch,
+// the irreversible calendar booking lies behind an approval gate.
+//
+// Note: CASL allows NO statement AFTER a `rec` block. The booking
+// must therefore be IN the Accept branch (not behind the loop). So that K
+// (calendar) can distinguish the loop outcome, it receives in EVERY
+// branch a message: Reserve/Pass (Accept) or Searching (Reject).
+//
+//   ./casl check examples/meeting_scheduler.casl
+//   ./casl run   examples/meeting_scheduler.casl --approve
+// =============================================================================
+protocol MeetingScheduler {
+  roles U, S, K;
+  agent S caps {
+    plan(constraint) scope "cal:read"  mode read  ttl 3 sig "s0";
+    calendar(event)  scope "cal:write" mode write ttl 1 sig "s1";
+  }
+
+  U -> S : Request(constraint: Str, budget: Int, maxTries: Int);
+  rec Loop measure maxTries bound 3 {
+    S -> U : Propose(slot: Str, cost: Int) [cost <= budget] uses plan oracle;
+    choice at U -> S {
+      Accept: {
+        choice approval at U -> S {
+          Book consent: { S -> K : Reserve() uses calendar irreversible; }
+          Hold:         { S -> K : Pass(); }
+        }
+      }
+      Reject(reason: Str) [len(reason) > 0]: {
+        S -> K : Searching();
+        U -> S : Retry(maxTries: Int);
+        continue Loop;
+      }
+    }
+  }
+}

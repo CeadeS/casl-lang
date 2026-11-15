@@ -1,0 +1,30 @@
+// =============================================================================
+// calendar_guard.casl — refuse to confirm an already-booked slot (case study)
+// See docs/cookbook/email-secretary.md
+// =============================================================================
+// U = User, S = secretary agent, K = calendar.
+//
+// An email committed to a date. S looks up the calendar and reports the number of
+// CONFLICTS for the requested slot (monitored `oracle` boundary over the calendar
+// read). The data contract [conflicts <= 0] is the DOUBLE-BOOKING GUARD: the flow
+// only stays well-formed when the slot is free (conflicts == 0). The irreversible
+// booking (uses calendar, mode write) additionally sits behind an approval gate.
+// K receives a distinguishing label on both paths (Reserve / Pass) → realizable.
+//
+//   ./casl check examples/calendar_guard.casl
+//   ./casl run   examples/calendar_guard.casl --approve
+// =============================================================================
+protocol CalendarGuard {
+  roles U, S, K;
+  agent S caps {
+    lookup(range)   scope "cal:readonly" mode read  ttl 1 sig "s0";
+    calendar(event) scope "cal:write"    mode write ttl 1 sig "s1";
+  }
+
+  U -> S : Commit(detail: Str);
+  S -> U : Slot(conflicts: Int) [conflicts <= 0] uses lookup oracle;
+  choice approval at U -> S {
+    Book consent: { S -> K : Reserve() uses calendar irreversible; }
+    Hold:         { S -> K : Pass(); }
+  }
+}

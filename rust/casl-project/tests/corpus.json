@@ -1,0 +1,294 @@
+[
+  {
+    "model": {
+      "artifacts": [],
+      "attest_pubkey": null,
+      "min_evidence": null,
+      "name": "p",
+      "version": "0.1.0"
+    },
+    "ok": true,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n"
+  },
+  {
+    "model": {
+      "artifacts": [
+        {
+          "body": "artifacts/conflict_check.py",
+          "confined": false,
+          "floor": "G0",
+          "grade": "G0",
+          "implements": null,
+          "kind": "verified",
+          "name": "conflict_check",
+          "owned": true,
+          "provides": null,
+          "requirement": "R2",
+          "signers": 1,
+          "trace": "full"
+        }
+      ],
+      "attest_pubkey": ".casl/attest.pub",
+      "min_evidence": null,
+      "name": "p",
+      "version": "0.1.0"
+    },
+    "ok": true,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[attest]\npubkey = \".casl/attest.pub\"\n[[artifact]]\nname = \"conflict_check\"\nkind = \"verified\"\nrequirement = \"R2\"\ngrade = \"G0\"\nbody = \"artifacts/conflict_check.py\"\n"
+  },
+  {
+    "model": {
+      "artifacts": [
+        {
+          "body": null,
+          "confined": false,
+          "floor": "G3",
+          "grade": "G0",
+          "implements": null,
+          "kind": "external",
+          "name": "dep",
+          "owned": false,
+          "provides": null,
+          "requirement": "R1",
+          "signers": 1,
+          "trace": "burden"
+        }
+      ],
+      "attest_pubkey": null,
+      "min_evidence": null,
+      "name": "p",
+      "version": "0.1.0"
+    },
+    "ok": true,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"dep\"\nkind = \"external\"\nrequirement = \"R1\"\ngrade = \"G0\"\n"
+  },
+  {
+    "model": {
+      "artifacts": [
+        {
+          "body": "artifacts/draft.py",
+          "confined": false,
+          "floor": "G3",
+          "grade": "G3",
+          "implements": null,
+          "kind": "generated",
+          "name": "draft",
+          "owned": true,
+          "provides": null,
+          "requirement": "R3",
+          "signers": 1,
+          "trace": "full"
+        },
+        {
+          "body": null,
+          "confined": false,
+          "floor": "G3",
+          "grade": "G3",
+          "implements": null,
+          "kind": "oracle",
+          "name": "cls",
+          "owned": true,
+          "provides": null,
+          "requirement": "R4",
+          "signers": 1,
+          "trace": "full"
+        }
+      ],
+      "attest_pubkey": null,
+      "min_evidence": null,
+      "name": "p",
+      "version": "0.1.0"
+    },
+    "ok": true,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"draft\"\nkind = \"generated\"\nrequirement = \"R3\"\ngrade = \"G3\"\nbody = \"artifacts/draft.py\"\n[[artifact]]\nname = \"cls\"\nkind = \"oracle\"\nrequirement = \"R4\"\ngrade = \"G3\"\n"
+  },
+  {
+    "model": {
+      "artifacts": [
+        {
+          "body": null,
+          "confined": false,
+          "floor": "G3",
+          "grade": "G3",
+          "implements": "Triage:Classify",
+          "kind": "oracle",
+          "name": "classify",
+          "owned": true,
+          "provides": null,
+          "requirement": "T1",
+          "signers": 1,
+          "trace": "full"
+        },
+        {
+          "body": null,
+          "confined": false,
+          "floor": "G3",
+          "grade": "G3",
+          "implements": "Triage:Notify",
+          "kind": "external",
+          "name": "notify",
+          "owned": false,
+          "provides": "mail",
+          "requirement": "T2",
+          "signers": 1,
+          "trace": "burden"
+        }
+      ],
+      "attest_pubkey": null,
+      "min_evidence": null,
+      "name": "triage",
+      "version": "0.1.0"
+    },
+    "ok": true,
+    "toml": "name = \"triage\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"classify\"\nkind = \"oracle\"\nrequirement = \"T1\"\ngrade = \"G3\"\nimplements = \"Triage:Classify\"\n[[artifact]]\nname = \"notify\"\nkind = \"external\"\nrequirement = \"T2\"\ngrade = \"G3\"\nimplements = \"Triage:Notify\"\nprovides = \"mail\"\n"
+  },
+  {
+    "model": {
+      "artifacts": [
+        {
+          "body": "artifacts/g.py",
+          "confined": false,
+          "floor": "G3",
+          "grade": "G3",
+          "implements": null,
+          "kind": "generated",
+          "name": "g",
+          "owned": true,
+          "provides": null,
+          "requirement": "R",
+          "signers": 2,
+          "trace": "full"
+        }
+      ],
+      "attest_pubkey": null,
+      "min_evidence": null,
+      "name": "p",
+      "version": "0.1.0"
+    },
+    "ok": true,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"g\"\nkind = \"generated\"\nrequirement = \"R\"\ngrade = \"G3\"\nbody = \"artifacts/g.py\"\nsigners = 2\n"
+  },
+  {
+    "model": {
+      "artifacts": [
+        {
+          "body": null,
+          "confined": false,
+          "floor": "G3",
+          "grade": "G3",
+          "implements": null,
+          "kind": "external",
+          "name": "dep",
+          "owned": false,
+          "provides": null,
+          "requirement": "R",
+          "signers": 1,
+          "trace": "burden"
+        }
+      ],
+      "attest_pubkey": null,
+      "min_evidence": "pin",
+      "name": "p",
+      "version": "0.1.0"
+    },
+    "ok": true,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\nmin_evidence = \"pin\"\n[[artifact]]\nname = \"dep\"\nkind = \"external\"\nrequirement = \"R\"\ngrade = \"G3\"\n"
+  },
+  {
+    "model": {
+      "artifacts": [
+        {
+          "body": "artifacts/w.py",
+          "confined": true,
+          "floor": "G3",
+          "grade": "G2",
+          "implements": null,
+          "kind": "generated",
+          "name": "w",
+          "owned": true,
+          "provides": null,
+          "requirement": "R",
+          "signers": 1,
+          "trace": "full"
+        }
+      ],
+      "attest_pubkey": null,
+      "min_evidence": null,
+      "name": "p",
+      "version": "0.1.0"
+    },
+    "ok": true,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"w\"\nkind = \"generated\"\nrequirement = \"R\"\ngrade = \"G2\"\nbody = \"artifacts/w.py\"\nconfined = true\n"
+  },
+  {
+    "model": null,
+    "ok": false,
+    "toml": "version = \"0.1.0\"\n"
+  },
+  {
+    "model": null,
+    "ok": false,
+    "toml": "name = \"p\"\n"
+  },
+  {
+    "model": null,
+    "ok": false,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"a\"\nkind = \"bogus\"\nrequirement = \"R\"\n"
+  },
+  {
+    "model": null,
+    "ok": false,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"a\"\nkind = \"verified\"\ngrade = \"G9\"\nbody = \"b\"\n"
+  },
+  {
+    "model": null,
+    "ok": false,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"a\"\nkind = \"generated\"\nrequirement = \"R\"\n"
+  },
+  {
+    "model": null,
+    "ok": false,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"a\"\nkind = \"verified\"\nbody = \"b\"\ntrace = \"burden\"\n"
+  },
+  {
+    "model": null,
+    "ok": false,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"a\"\nkind = \"oracle\"\nrequirement = \"R\"\nimplements = \"noColon\"\n"
+  },
+  {
+    "model": null,
+    "ok": false,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"a\"\nkind = \"external\"\nrequirement = \"R\"\nprovides = \"\"\n"
+  },
+  {
+    "model": null,
+    "ok": false,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nkind = \"verified\"\nbody = \"b\"\n"
+  },
+  {
+    "model": {
+      "artifacts": [
+        {
+          "body": "b",
+          "confined": false,
+          "floor": "G3",
+          "grade": "G3",
+          "implements": null,
+          "kind": "generated",
+          "name": "a",
+          "owned": true,
+          "provides": null,
+          "requirement": "",
+          "signers": 1,
+          "trace": "full"
+        }
+      ],
+      "attest_pubkey": null,
+      "min_evidence": null,
+      "name": "p",
+      "version": "0.1.0"
+    },
+    "ok": true,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"a\"\nkind = \"generated\"\nbody = \"b\"\nsigners = 0\n"
+  }
+]

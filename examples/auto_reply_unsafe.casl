@@ -1,0 +1,26 @@
+// =============================================================================
+// auto_reply_unsafe.casl — ANTI-PATTERN (MUST be rejected)
+// =============================================================================
+// The classic agent blunder: an auto-responder that sends UNPROMPTED on every
+// mail. `Deliver` is effect-bearing (uses send, mode write) and
+// does NOT lie behind an approval gate → approval dominance (LH-Q-011) MUST
+// make `casl check` reject with exit 1. Exactly this default mistake is what
+// CASL structurally prevents (deny-by-default), instead of waving it through.
+//
+//   ./casl check examples/auto_reply_unsafe.casl    # expected: ✗ REJECTED (exit 1)
+// =============================================================================
+protocol AutoReplyUnsafe {
+  roles Env, S, M;
+  env Env;
+  agent S caps { send(to) scope "mail:send" mode write ttl 1 sig "s1"; }
+
+  stream Loop {
+    choice at Env -> S {
+      Mail(subject: Str): {
+        S -> M : Deliver() uses send irreversible;
+        continue Loop;
+      }
+      Quit: { S -> M : Closed(); }
+    }
+  }
+}

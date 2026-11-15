@@ -1,0 +1,12 @@
+[package]
+name = "casl-surface"
+version = "0.1.0"
+edition = "2021"
+description = "CASL surface parser (.casl text -> canonical AST) — the first strangler-fig brick (CEP-0081). Hand-written recursive descent, zero runtime dependencies, pinned to the Python reference by a parse-differential."
+license = "Apache-2.0"
+
+[dependencies]
+# none — zero runtime dependencies (the parser is std-only; no new burden-ledger entry).
+
+[dev-dependencies]
+serde_json = "1"   # test-only: read the single-sourced corpus + compare ASTs as JSON Values

@@ -1,0 +1,41 @@
+// =============================================================================
+// triage.casl — the CONDUCTOR dogfood (docs/conductor.md)
+// =============================================================================
+// A minimal end-to-end project the conductor RUNS through the broker:
+//   · an ORACLE site (Classify) — dispatched to the model via the broker; the
+//     [cost <= budget] contract is checked at the broker-mediated boundary (the
+//     H4 measured cost) by the conductor's contract monitor;
+//   · an EFFECT site (Notify uses mail) — dispatched through the broker
+//     (deny-by-default) and, per the approval-dominance invariant (LH-Q-011),
+//     it lives in the CONSENT branch of a human approval gate.
+//
+// U = User, S = secretary (agent), M = mail.
+//   casl check examples/projects/triage/casl/triage.casl       # ✓ accepted
+//   casl run --project examples/projects/triage --approve      # conduct it
+// =============================================================================
+protocol Triage {
+  roles U, S, M;
+  agent S caps {
+    mail(to) scope "mail:send" mode write ttl 1 sig "s1";
+  }
+
+  U -> S : Email(body: Str);
+
+  // S classifies the email's importance via the LLM ORACLE. The broker gates the
+  // call + measures the cost (H4); the conductor then checks [cost <= budget].
+  S -> U : Classify(level: Int) oracle [cost <= budget];
+
+  // The mail send is an EFFECT, so it must be dominated by an approval-consent
+  // branch (LH-Q-011). The conductor discloses it at the gate, then dispatches it
+  // through the broker on consent.
+  choice approval at U -> S {
+    Send consent: {
+      S -> M : Notify() uses mail;
+      M -> U : Done();
+    }
+    Hold: {
+      S -> M : Hold();
+      M -> U : Done();
+    }
+  }
+}

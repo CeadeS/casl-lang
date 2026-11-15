@@ -1,0 +1,6 @@
+# CASL-IDE — MCP-Server-Abhängigkeiten. ACHTUNG: das MCP-SDK braucht Python ≥ 3.10.
+# Unter einem ≥3.10-Interpreter installieren (z. B. python3.12):
+#   python3.12 -m pip install -r requirements-ide.txt
+# Bequemer: ./scripts/setup-ide.sh erledigt Python-Wahl, Installation und Registrierung.
+mcp>=1.0
+z3-solver>=4.12

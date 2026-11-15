@@ -1,0 +1,3524 @@
+[
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {},
+      "crash": [],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "cont": {
+            "node": "end"
+          },
+          "contract": null,
+          "fields": [
+            {
+              "name": "y",
+              "sort": "",
+              "source": "Req.x"
+            },
+            {
+              "name": "z",
+              "sort": "Int",
+              "source": "Req.x"
+            }
+          ],
+          "from_oracle": false,
+          "irreversible": false,
+          "label": "Res",
+          "node": "comm",
+          "on_crash": null,
+          "receiver": "C",
+          "sender": "A",
+          "uses": null,
+          "verified": false
+        },
+        "contract": null,
+        "fields": [
+          {
+            "name": "x",
+            "sort": "Int",
+            "source": null
+          }
+        ],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "Req",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "A",
+        "sender": "C",
+        "uses": null,
+        "verified": false
+      },
+      "name": "Fwd",
+      "roles": [
+        "C",
+        "A"
+      ]
+    },
+    "casl": "protocol Fwd {\n  roles C, A;\n  C -> A : Req(x: Int);\n  A -> C : Res(y = Req.x, z: Int = Req.x);\n}"
+  },
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {
+        "S": [
+          {
+            "mode": "write",
+            "params": [
+              "to"
+            ],
+            "scope": "smtp",
+            "sigma": "s1",
+            "tool": "mail",
+            "ttl": 1
+          }
+        ]
+      },
+      "crash": [],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "approval": true,
+          "branches": [
+            {
+              "consent": true,
+              "cont": {
+                "cont": {
+                  "node": "end"
+                },
+                "contract": null,
+                "fields": [],
+                "from_oracle": false,
+                "irreversible": true,
+                "label": "Notify",
+                "node": "comm",
+                "on_crash": null,
+                "receiver": "U",
+                "sender": "S",
+                "uses": "mail",
+                "verified": false
+              },
+              "contract": null,
+              "fields": [],
+              "label": "Approve"
+            },
+            {
+              "consent": false,
+              "cont": {
+                "cont": {
+                  "node": "end"
+                },
+                "contract": null,
+                "fields": [],
+                "from_oracle": false,
+                "irreversible": false,
+                "label": "Drop",
+                "node": "comm",
+                "on_crash": null,
+                "receiver": "U",
+                "sender": "S",
+                "uses": null,
+                "verified": false
+              },
+              "contract": null,
+              "fields": [],
+              "label": "Deny"
+            }
+          ],
+          "node": "choice",
+          "receiver": "S",
+          "sender": "U"
+        },
+        "contract": null,
+        "fields": [],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "Conflict",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "U",
+        "sender": "S",
+        "uses": null,
+        "verified": false
+      },
+      "name": "Appr",
+      "roles": [
+        "U",
+        "S"
+      ]
+    },
+    "casl": "protocol Appr {\n  roles U, S;\n  agent S caps { mail(to) scope \"smtp\" mode write ttl 1 sig \"s1\"; }\n  S -> U : Conflict();\n  choice approval at U -> S {\n    Approve consent: { S -> U : Notify() uses mail irreversible; }\n    Deny: { S -> U : Drop(); }\n  }\n}"
+  },
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {},
+      "crash": [
+        "S"
+      ],
+      "env": [
+        "E"
+      ],
+      "gtype": {
+        "body": {
+          "cont": {
+            "cont": {
+              "node": "var",
+              "var": "Loop"
+            },
+            "contract": null,
+            "fields": [],
+            "from_oracle": false,
+            "irreversible": false,
+            "label": "Ack",
+            "node": "comm",
+            "on_crash": {
+              "cont": {
+                "node": "end"
+              },
+              "contract": null,
+              "fields": [],
+              "from_oracle": false,
+              "irreversible": false,
+              "label": "Down",
+              "node": "comm",
+              "on_crash": null,
+              "receiver": "E",
+              "sender": "S",
+              "uses": null,
+              "verified": false
+            },
+            "receiver": "E",
+            "sender": "S",
+            "uses": null,
+            "verified": false
+          },
+          "contract": null,
+          "fields": [
+            {
+              "name": "d",
+              "sort": "Str",
+              "source": null
+            }
+          ],
+          "from_oracle": false,
+          "irreversible": false,
+          "label": "Event",
+          "node": "comm",
+          "on_crash": null,
+          "receiver": "S",
+          "sender": "E",
+          "uses": null,
+          "verified": false
+        },
+        "max_iters": null,
+        "measure": null,
+        "node": "rec",
+        "stream": true,
+        "var": "Loop"
+      },
+      "name": "Strm",
+      "roles": [
+        "E",
+        "S"
+      ]
+    },
+    "casl": "protocol Strm {\n  roles E, S;\n  env E;\n  crash S;\n  stream Loop {\n    E -> S : Event(d: Str);\n    S -> E : Ack() on_crash { S -> E : Down(); };\n    continue Loop;\n  }\n}"
+  },
+  {
+    "ast": {
+      "async_k": 2,
+      "caps": {},
+      "crash": [],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "cont": {
+            "cont": {
+              "cont": {
+                "node": "end"
+              },
+              "contract": null,
+              "fields": [],
+              "from_oracle": false,
+              "irreversible": false,
+              "label": "Done",
+              "node": "comm",
+              "on_crash": null,
+              "receiver": "C",
+              "sender": "D",
+              "uses": null,
+              "verified": false
+            },
+            "contract": null,
+            "fields": [],
+            "from_oracle": false,
+            "irreversible": false,
+            "label": "Route",
+            "node": "comm",
+            "on_crash": null,
+            "receiver": "D",
+            "sender": "J",
+            "uses": null,
+            "verified": false
+          },
+          "contract": {
+            "relation": [
+              "le",
+              0,
+              "cost"
+            ],
+            "text": "cost >= 0"
+          },
+          "fields": [
+            {
+              "name": "cost",
+              "sort": "Int",
+              "source": null
+            }
+          ],
+          "from_oracle": false,
+          "irreversible": false,
+          "label": "Draft",
+          "node": "comm",
+          "on_crash": null,
+          "receiver": "J",
+          "sender": "A",
+          "uses": null,
+          "verified": true
+        },
+        "contract": null,
+        "fields": [
+          {
+            "name": "n",
+            "sort": "Int",
+            "source": null
+          }
+        ],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "Q",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "A",
+        "sender": "C",
+        "uses": null,
+        "verified": false
+      },
+      "name": "Async4",
+      "roles": [
+        "C",
+        "A",
+        "J",
+        "D"
+      ]
+    },
+    "casl": "protocol Async4 {\n  roles C, A, J, D;\n  async k 2;\n  C -> A : Q(n: Int);\n  A -> J : Draft(cost: Int) [cost >= 0] verified;\n  J -> D : Route();\n  D -> C : Done();\n}"
+  },
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {},
+      "crash": [],
+      "env": [],
+      "gtype": {
+        "body": {
+          "cont": {
+            "approval": false,
+            "branches": [
+              {
+                "consent": false,
+                "cont": {
+                  "cont": {
+                    "node": "end"
+                  },
+                  "contract": null,
+                  "fields": [],
+                  "from_oracle": false,
+                  "irreversible": false,
+                  "label": "Done",
+                  "node": "comm",
+                  "on_crash": null,
+                  "receiver": "A",
+                  "sender": "J",
+                  "uses": null,
+                  "verified": false
+                },
+                "contract": null,
+                "fields": [],
+                "label": "Accept"
+              },
+              {
+                "consent": false,
+                "cont": {
+                  "cont": {
+                    "node": "var",
+                    "var": "Loop"
+                  },
+                  "contract": null,
+                  "fields": [],
+                  "from_oracle": false,
+                  "irreversible": false,
+                  "label": "Retry",
+                  "node": "comm",
+                  "on_crash": null,
+                  "receiver": "A",
+                  "sender": "J",
+                  "uses": null,
+                  "verified": false
+                },
+                "contract": {
+                  "relation": [
+                    "nonempty",
+                    "reason",
+                    null
+                  ],
+                  "text": "len(reason) > 0"
+                },
+                "fields": [
+                  {
+                    "name": "reason",
+                    "sort": "Str",
+                    "source": null
+                  }
+                ],
+                "label": "Reject"
+              }
+            ],
+            "node": "choice",
+            "receiver": "C",
+            "sender": "J"
+          },
+          "contract": {
+            "relation": [
+              "le",
+              "cost",
+              "budget"
+            ],
+            "text": "cost <= budget"
+          },
+          "fields": [
+            {
+              "name": "answer",
+              "sort": "Str",
+              "source": null
+            },
+            {
+              "name": "cost",
+              "sort": "Int",
+              "source": null
+            }
+          ],
+          "from_oracle": true,
+          "irreversible": false,
+          "label": "Draft",
+          "node": "comm",
+          "on_crash": null,
+          "receiver": "J",
+          "sender": "A",
+          "uses": "search",
+          "verified": false
+        },
+        "max_iters": 5,
+        "measure": "n",
+        "node": "rec",
+        "stream": false,
+        "var": "Loop"
+      },
+      "name": "Meas",
+      "roles": [
+        "C",
+        "A",
+        "J"
+      ]
+    },
+    "casl": "protocol Meas {\n  roles C, A, J;\n  rec Loop measure n bound 5 {\n    A -> J : Draft(answer: Str, cost: Int) [cost <= budget] uses search oracle;\n    choice at J -> C {\n      Accept: { J -> A : Done(); }\n      Reject(reason: Str) [len(reason) > 0]: { J -> A : Retry(); continue Loop; }\n    }\n  }\n}"
+  },
+  {
+    "ast": {
+      "async_k": 2,
+      "caps": {},
+      "crash": [],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "cont": {
+            "cont": {
+              "cont": {
+                "node": "end"
+              },
+              "contract": null,
+              "fields": [],
+              "from_oracle": false,
+              "irreversible": false,
+              "label": "ResB",
+              "node": "comm",
+              "on_crash": null,
+              "receiver": "C",
+              "sender": "B",
+              "uses": null,
+              "verified": false
+            },
+            "contract": null,
+            "fields": [],
+            "from_oracle": false,
+            "irreversible": false,
+            "label": "ResA",
+            "node": "comm",
+            "on_crash": null,
+            "receiver": "C",
+            "sender": "A",
+            "uses": null,
+            "verified": false
+          },
+          "contract": null,
+          "fields": [],
+          "from_oracle": false,
+          "irreversible": false,
+          "label": "Req",
+          "node": "comm",
+          "on_crash": null,
+          "receiver": "B",
+          "sender": "C",
+          "uses": null,
+          "verified": false
+        },
+        "contract": null,
+        "fields": [],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "Req",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "A",
+        "sender": "C",
+        "uses": null,
+        "verified": false
+      },
+      "name": "AsyncFaninBad",
+      "roles": [
+        "C",
+        "A",
+        "B"
+      ]
+    },
+    "casl": "// =============================================================================\n// async_fanin_bad.casl — REJECTED: reorder trap on fan-in (LH-F-010)\n// =============================================================================\n// C asks A and B and expects the responses in the order A, then B —\n// but both write into C's ONE inbox, and B may answer first. Then\n// B's `ResB` sits at the inbox head, yet C expects `ResA` from A → C is blocked, no\n// reordering → DEADLOCK. Exactly the trap that async introduces: responses do\n// NOT come back in request order, guaranteed.\n//\n// Synchronously this protocol would be well-formed — the async gate rejects it\n// (deny-by-default) because ONE interleaving deadlocks. Remedy: keep it synchronous,\n// or restructure so that C accepts both orderings.\n//\n//   ./casl check examples/async_fanin_bad.casl   # ✗ async-rejected (reorder/deadlock)\n// =============================================================================\nprotocol AsyncFaninBad {\n  roles C, A, B;\n  async k 2;\n\n  C -> A : Req();\n  C -> B : Req();\n  A -> C : ResA();\n  B -> C : ResB();\n}\n"
+  },
+  {
+    "ast": {
+      "async_k": 1,
+      "caps": {},
+      "crash": [],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "cont": {
+            "cont": {
+              "cont": {
+                "node": "end"
+              },
+              "contract": null,
+              "fields": [],
+              "from_oracle": false,
+              "irreversible": false,
+              "label": "done",
+              "node": "comm",
+              "on_crash": null,
+              "receiver": "E",
+              "sender": "B",
+              "uses": null,
+              "verified": false
+            },
+            "contract": null,
+            "fields": [],
+            "from_oracle": false,
+            "irreversible": false,
+            "label": "done",
+            "node": "comm",
+            "on_crash": null,
+            "receiver": "C",
+            "sender": "A",
+            "uses": null,
+            "verified": false
+          },
+          "contract": null,
+          "fields": [],
+          "from_oracle": false,
+          "irreversible": false,
+          "label": "task",
+          "node": "comm",
+          "on_crash": null,
+          "receiver": "B",
+          "sender": "C",
+          "uses": null,
+          "verified": false
+        },
+        "contract": null,
+        "fields": [],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "task",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "A",
+        "sender": "C",
+        "uses": null,
+        "verified": false
+      },
+      "name": "AsyncFanout",
+      "roles": [
+        "C",
+        "A",
+        "B",
+        "E"
+      ]
+    },
+    "casl": "// =============================================================================\n// async_fanout.casl — true concurrency via buffers (LH-F-010), SAFE\n// =============================================================================\n// C distributes two tasks to independent workers A and B; the responses go to\n// DISJOINT receivers (C and E, respectively). Because each inbox has only ONE\n// sender, there is no ordering contention — no matter what order the responses\n// arrive in, no inbox head is ever wrongly expected.\n//\n// Truly async: up to 2 messages in flight at a time ⇒ NOT sync-equivalent,\n// but the deny-by-default gate certifies bounded + orphan-free + deadlock-free\n// ⇒ class `async-bounded-safe`.\n//\n//   ./casl check examples/async_fanout.casl      # ✓ async-bounded-safe\n// =============================================================================\nprotocol AsyncFanout {\n  roles C, A, B, E;\n  async k 1;\n\n  C -> A : task();\n  C -> B : task();\n  A -> C : done();\n  B -> E : done();\n}\n"
+  },
+  {
+    "ast": {
+      "async_k": 1,
+      "caps": {},
+      "crash": [],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "cont": {
+            "node": "end"
+          },
+          "contract": null,
+          "fields": [],
+          "from_oracle": false,
+          "irreversible": false,
+          "label": "Res",
+          "node": "comm",
+          "on_crash": null,
+          "receiver": "C",
+          "sender": "A",
+          "uses": null,
+          "verified": false
+        },
+        "contract": null,
+        "fields": [],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "Req",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "A",
+        "sender": "C",
+        "uses": null,
+        "verified": false
+      },
+      "name": "AsyncRequest",
+      "roles": [
+        "C",
+        "A"
+      ]
+    },
+    "casl": "// =============================================================================\n// async_request.casl — buffered request/response (LH-F-010), SYNC-EQUIVALENT\n// =============================================================================\n// The `async` marker adds the buffered refinement (opt-in). Without the\n// marker the protocol would stay synchronous (the proven default). Here only ONE\n// message is in flight at a time ⇒ the async behavior coincides with the\n// synchronous semantics ⇒ class `async-synchronizable` (inherits the proven guarantees).\n//\n//   ./casl check examples/async_request.casl     # ✓ async-synchronizable\n// =============================================================================\nprotocol AsyncRequest {\n  roles C, A;\n  async k 1;\n\n  C -> A : Req();\n  A -> C : Res();\n}\n"
+  },
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {
+        "S": [
+          {
+            "mode": "write",
+            "params": [
+              "to"
+            ],
+            "scope": "mail:send",
+            "sigma": "s1",
+            "tool": "send",
+            "ttl": 1
+          }
+        ]
+      },
+      "crash": [],
+      "env": [
+        "Env"
+      ],
+      "gtype": {
+        "body": {
+          "approval": false,
+          "branches": [
+            {
+              "consent": false,
+              "cont": {
+                "cont": {
+                  "node": "var",
+                  "var": "Loop"
+                },
+                "contract": null,
+                "fields": [],
+                "from_oracle": false,
+                "irreversible": true,
+                "label": "Deliver",
+                "node": "comm",
+                "on_crash": null,
+                "receiver": "M",
+                "sender": "S",
+                "uses": "send",
+                "verified": false
+              },
+              "contract": null,
+              "fields": [
+                {
+                  "name": "subject",
+                  "sort": "Str",
+                  "source": null
+                }
+              ],
+              "label": "Mail"
+            },
+            {
+              "consent": false,
+              "cont": {
+                "cont": {
+                  "node": "end"
+                },
+                "contract": null,
+                "fields": [],
+                "from_oracle": false,
+                "irreversible": false,
+                "label": "Closed",
+                "node": "comm",
+                "on_crash": null,
+                "receiver": "M",
+                "sender": "S",
+                "uses": null,
+                "verified": false
+              },
+              "contract": null,
+              "fields": [],
+              "label": "Quit"
+            }
+          ],
+          "node": "choice",
+          "receiver": "S",
+          "sender": "Env"
+        },
+        "max_iters": null,
+        "measure": null,
+        "node": "rec",
+        "stream": true,
+        "var": "Loop"
+      },
+      "name": "AutoReplyUnsafe",
+      "roles": [
+        "Env",
+        "S",
+        "M"
+      ]
+    },
+    "casl": "// =============================================================================\n// auto_reply_unsafe.casl — ANTI-PATTERN (MUST be rejected)\n// =============================================================================\n// The classic agent blunder: an auto-responder that sends UNPROMPTED on every\n// mail. `Deliver` is effect-bearing (uses send, mode write) and\n// does NOT lie behind an approval gate → approval dominance (LH-Q-011) MUST\n// make `casl check` reject with exit 1. Exactly this default mistake is what\n// CASL structurally prevents (deny-by-default), instead of waving it through.\n//\n//   ./casl check examples/auto_reply_unsafe.casl    # expected: ✗ REJECTED (exit 1)\n// =============================================================================\nprotocol AutoReplyUnsafe {\n  roles Env, S, M;\n  env Env;\n  agent S caps { send(to) scope \"mail:send\" mode write ttl 1 sig \"s1\"; }\n\n  stream Loop {\n    choice at Env -> S {\n      Mail(subject: Str): {\n        S -> M : Deliver() uses send irreversible;\n        continue Loop;\n      }\n      Quit: { S -> M : Closed(); }\n    }\n  }\n}\n"
+  },
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {
+        "A": [
+          {
+            "mode": "read",
+            "params": [
+              "query"
+            ],
+            "scope": "web:readonly",
+            "sigma": "sig-A1",
+            "tool": "search",
+            "ttl": 3
+          }
+        ]
+      },
+      "crash": [
+        "A"
+      ],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "body": {
+            "cont": {
+              "approval": false,
+              "branches": [
+                {
+                  "consent": false,
+                  "cont": {
+                    "cont": {
+                      "node": "end"
+                    },
+                    "contract": null,
+                    "fields": [],
+                    "from_oracle": false,
+                    "irreversible": false,
+                    "label": "Done",
+                    "node": "comm",
+                    "on_crash": null,
+                    "receiver": "A",
+                    "sender": "J",
+                    "uses": null,
+                    "verified": false
+                  },
+                  "contract": null,
+                  "fields": [],
+                  "label": "Accept"
+                },
+                {
+                  "consent": false,
+                  "cont": {
+                    "cont": {
+                      "node": "var",
+                      "var": "Loop"
+                    },
+                    "contract": null,
+                    "fields": [],
+                    "from_oracle": false,
+                    "irreversible": false,
+                    "label": "Retry",
+                    "node": "comm",
+                    "on_crash": null,
+                    "receiver": "A",
+                    "sender": "J",
+                    "uses": null,
+                    "verified": false
+                  },
+                  "contract": {
+                    "relation": [
+                      "nonempty",
+                      "reason",
+                      null
+                    ],
+                    "text": "len(reason) > 0"
+                  },
+                  "fields": [
+                    {
+                      "name": "reason",
+                      "sort": "Str",
+                      "source": null
+                    }
+                  ],
+                  "label": "Reject"
+                }
+              ],
+              "node": "choice",
+              "receiver": "C",
+              "sender": "J"
+            },
+            "contract": {
+              "relation": [
+                "le",
+                "cost",
+                "budget"
+              ],
+              "text": "cost <= budget"
+            },
+            "fields": [
+              {
+                "name": "answer",
+                "sort": "Str",
+                "source": null
+              },
+              {
+                "name": "cost",
+                "sort": "Int",
+                "source": null
+              }
+            ],
+            "from_oracle": true,
+            "irreversible": false,
+            "label": "Draft",
+            "node": "comm",
+            "on_crash": null,
+            "receiver": "J",
+            "sender": "A",
+            "uses": "search",
+            "verified": false
+          },
+          "max_iters": null,
+          "measure": null,
+          "node": "rec",
+          "stream": false,
+          "var": "Loop"
+        },
+        "contract": null,
+        "fields": [
+          {
+            "name": "question",
+            "sort": "Str",
+            "source": null
+          },
+          {
+            "name": "budget",
+            "sort": "Int",
+            "source": null
+          }
+        ],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "Request",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "A",
+        "sender": "C",
+        "uses": null,
+        "verified": false
+      },
+      "name": "BudgetedQA",
+      "roles": [
+        "C",
+        "A",
+        "J"
+      ]
+    },
+    "casl": "// Canonical CASL example — parses exactly to casl_core.G_OK\nprotocol BudgetedQA {\n  roles C, A, J;\n  agent A caps { search(query) scope \"web:readonly\" mode read ttl 3 sig \"sig-A1\"; }\n  crash A;\n\n  C -> A : Request(question: Str, budget: Int);\n  rec Loop {\n    A -> J : Draft(answer: Str, cost: Int) [cost <= budget] uses search oracle;\n    choice at J -> C {\n      Accept: { J -> A : Done(); }\n      Reject(reason: Str) [len(reason) > 0]: { J -> A : Retry(); continue Loop; }\n    }\n  }\n}\n"
+  },
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {
+        "A": [
+          {
+            "mode": "read",
+            "params": [
+              "query"
+            ],
+            "scope": "web:readonly",
+            "sigma": "sig-A1",
+            "tool": "search",
+            "ttl": 3
+          }
+        ]
+      },
+      "crash": [
+        "A"
+      ],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "body": {
+            "cont": {
+              "approval": false,
+              "branches": [
+                {
+                  "consent": false,
+                  "cont": {
+                    "cont": {
+                      "node": "end"
+                    },
+                    "contract": null,
+                    "fields": [],
+                    "from_oracle": false,
+                    "irreversible": false,
+                    "label": "Done",
+                    "node": "comm",
+                    "on_crash": null,
+                    "receiver": "A",
+                    "sender": "J",
+                    "uses": null,
+                    "verified": false
+                  },
+                  "contract": null,
+                  "fields": [],
+                  "label": "Accept"
+                },
+                {
+                  "consent": false,
+                  "cont": {
+                    "cont": {
+                      "node": "var",
+                      "var": "Loop"
+                    },
+                    "contract": null,
+                    "fields": [],
+                    "from_oracle": false,
+                    "irreversible": false,
+                    "label": "Retry",
+                    "node": "comm",
+                    "on_crash": null,
+                    "receiver": "A",
+                    "sender": "J",
+                    "uses": null,
+                    "verified": false
+                  },
+                  "contract": {
+                    "relation": [
+                      "nonempty",
+                      "reason",
+                      null
+                    ],
+                    "text": "len(reason) > 0"
+                  },
+                  "fields": [
+                    {
+                      "name": "reason",
+                      "sort": "Str",
+                      "source": null
+                    }
+                  ],
+                  "label": "Reject"
+                }
+              ],
+              "node": "choice",
+              "receiver": "C",
+              "sender": "J"
+            },
+            "contract": {
+              "relation": [
+                "le",
+                "cost",
+                "budget"
+              ],
+              "text": "cost <= budget"
+            },
+            "fields": [
+              {
+                "name": "answer",
+                "sort": "Str",
+                "source": null
+              },
+              {
+                "name": "cost",
+                "sort": "Int",
+                "source": null
+              }
+            ],
+            "from_oracle": true,
+            "irreversible": false,
+            "label": "Draft",
+            "node": "comm",
+            "on_crash": null,
+            "receiver": "J",
+            "sender": "A",
+            "uses": "search",
+            "verified": false
+          },
+          "max_iters": 3,
+          "measure": "budget",
+          "node": "rec",
+          "stream": false,
+          "var": "Loop"
+        },
+        "contract": null,
+        "fields": [
+          {
+            "name": "question",
+            "sort": "Str",
+            "source": null
+          },
+          {
+            "name": "budget",
+            "sort": "Int",
+            "source": null
+          }
+        ],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "Request",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "A",
+        "sender": "C",
+        "uses": null,
+        "verified": false
+      },
+      "name": "BudgetedQA",
+      "roles": [
+        "C",
+        "A",
+        "J"
+      ]
+    },
+    "casl": "// Termination-annotated variant — parses exactly to casl_core.G_OK_TERM\n// (ranking measure budget with upper bound 3 → loop terminates, ttl-safe).\nprotocol BudgetedQA {\n  roles C, A, J;\n  agent A caps { search(query) scope \"web:readonly\" mode read ttl 3 sig \"sig-A1\"; }\n  crash A;\n\n  C -> A : Request(question: Str, budget: Int);\n  rec Loop measure budget bound 3 {\n    A -> J : Draft(answer: Str, cost: Int) [cost <= budget] uses search oracle;\n    choice at J -> C {\n      Accept: { J -> A : Done(); }\n      Reject(reason: Str) [len(reason) > 0]: { J -> A : Retry(); continue Loop; }\n    }\n  }\n}\n"
+  },
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {
+        "S": [
+          {
+            "mode": "read",
+            "params": [
+              "range"
+            ],
+            "scope": "cal:readonly",
+            "sigma": "s0",
+            "tool": "lookup",
+            "ttl": 1
+          },
+          {
+            "mode": "write",
+            "params": [
+              "event"
+            ],
+            "scope": "cal:write",
+            "sigma": "s1",
+            "tool": "calendar",
+            "ttl": 1
+          }
+        ]
+      },
+      "crash": [],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "cont": {
+            "approval": true,
+            "branches": [
+              {
+                "consent": true,
+                "cont": {
+                  "cont": {
+                    "node": "end"
+                  },
+                  "contract": null,
+                  "fields": [],
+                  "from_oracle": false,
+                  "irreversible": true,
+                  "label": "Reserve",
+                  "node": "comm",
+                  "on_crash": null,
+                  "receiver": "K",
+                  "sender": "S",
+                  "uses": "calendar",
+                  "verified": false
+                },
+                "contract": null,
+                "fields": [],
+                "label": "Book"
+              },
+              {
+                "consent": false,
+                "cont": {
+                  "cont": {
+                    "node": "end"
+                  },
+                  "contract": null,
+                  "fields": [],
+                  "from_oracle": false,
+                  "irreversible": false,
+                  "label": "Pass",
+                  "node": "comm",
+                  "on_crash": null,
+                  "receiver": "K",
+                  "sender": "S",
+                  "uses": null,
+                  "verified": false
+                },
+                "contract": null,
+                "fields": [],
+                "label": "Hold"
+              }
+            ],
+            "node": "choice",
+            "receiver": "S",
+            "sender": "U"
+          },
+          "contract": {
+            "relation": [
+              "le",
+              "conflicts",
+              0
+            ],
+            "text": "conflicts <= 0"
+          },
+          "fields": [
+            {
+              "name": "conflicts",
+              "sort": "Int",
+              "source": null
+            }
+          ],
+          "from_oracle": true,
+          "irreversible": false,
+          "label": "Slot",
+          "node": "comm",
+          "on_crash": null,
+          "receiver": "U",
+          "sender": "S",
+          "uses": "lookup",
+          "verified": false
+        },
+        "contract": null,
+        "fields": [
+          {
+            "name": "detail",
+            "sort": "Str",
+            "source": null
+          }
+        ],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "Commit",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "S",
+        "sender": "U",
+        "uses": null,
+        "verified": false
+      },
+      "name": "CalendarGuard",
+      "roles": [
+        "U",
+        "S",
+        "K"
+      ]
+    },
+    "casl": "// =============================================================================\n// calendar_guard.casl — refuse to confirm an already-booked slot (case study)\n// See docs/cookbook/email-secretary.md\n// =============================================================================\n// U = User, S = secretary agent, K = calendar.\n//\n// An email committed to a date. S looks up the calendar and reports the number of\n// CONFLICTS for the requested slot (monitored `oracle` boundary over the calendar\n// read). The data contract [conflicts <= 0] is the DOUBLE-BOOKING GUARD: the flow\n// only stays well-formed when the slot is free (conflicts == 0). The irreversible\n// booking (uses calendar, mode write) additionally sits behind an approval gate.\n// K receives a distinguishing label on both paths (Reserve / Pass) → realizable.\n//\n//   ./casl check examples/calendar_guard.casl\n//   ./casl run   examples/calendar_guard.casl --approve\n// =============================================================================\nprotocol CalendarGuard {\n  roles U, S, K;\n  agent S caps {\n    lookup(range)   scope \"cal:readonly\" mode read  ttl 1 sig \"s0\";\n    calendar(event) scope \"cal:write\"    mode write ttl 1 sig \"s1\";\n  }\n\n  U -> S : Commit(detail: Str);\n  S -> U : Slot(conflicts: Int) [conflicts <= 0] uses lookup oracle;\n  choice approval at U -> S {\n    Book consent: { S -> K : Reserve() uses calendar irreversible; }\n    Hold:         { S -> K : Pass(); }\n  }\n}\n"
+  },
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {
+        "A": [
+          {
+            "mode": "write",
+            "params": [
+              "query"
+            ],
+            "scope": "web:readonly",
+            "sigma": "sig-A1",
+            "tool": "search",
+            "ttl": 3
+          }
+        ]
+      },
+      "crash": [],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "cont": {
+            "cont": {
+              "node": "end"
+            },
+            "contract": null,
+            "fields": [],
+            "from_oracle": false,
+            "irreversible": false,
+            "label": "Done",
+            "node": "comm",
+            "on_crash": null,
+            "receiver": "A",
+            "sender": "J",
+            "uses": null,
+            "verified": false
+          },
+          "contract": {
+            "relation": [
+              "le",
+              "cost",
+              "budget"
+            ],
+            "text": "cost <= budget"
+          },
+          "fields": [
+            {
+              "name": "answer",
+              "sort": "Str",
+              "source": null
+            },
+            {
+              "name": "cost",
+              "sort": "Int",
+              "source": null
+            }
+          ],
+          "from_oracle": true,
+          "irreversible": false,
+          "label": "Draft",
+          "node": "comm",
+          "on_crash": null,
+          "receiver": "J",
+          "sender": "A",
+          "uses": "delete",
+          "verified": false
+        },
+        "contract": null,
+        "fields": [
+          {
+            "name": "question",
+            "sort": "Str",
+            "source": null
+          },
+          {
+            "name": "budget",
+            "sort": "Int",
+            "source": null
+          }
+        ],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "Request",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "A",
+        "sender": "C",
+        "uses": null,
+        "verified": false
+      },
+      "name": "CapViolation",
+      "roles": [
+        "C",
+        "A",
+        "J"
+      ]
+    },
+    "casl": "// INTENTIONALLY FAULTY — demonstration of the capability diagnostics.\n// A holds only the capability `search` but uses `delete` → least-privilege\n// violation (MUST). `casl check` MUST reject with exit 1.\nprotocol CapViolation {\n  roles C, A, J;\n  agent A caps { search(query) scope \"web:readonly\" ttl 3 sig \"sig-A1\"; }\n\n  C -> A : Request(question: Str, budget: Int);\n  A -> J : Draft(answer: Str, cost: Int) [cost <= budget] uses delete oracle;\n  J -> A : Done();\n}\n"
+  },
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {
+        "Store": [
+          {
+            "mode": "write",
+            "params": [
+              "artifact"
+            ],
+            "scope": "project:artifacts",
+            "sigma": "store1",
+            "tool": "write",
+            "ttl": 1
+          }
+        ]
+      },
+      "crash": [],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "cont": {
+            "cont": {
+              "cont": {
+                "approval": true,
+                "branches": [
+                  {
+                    "consent": true,
+                    "cont": {
+                      "cont": {
+                        "node": "end"
+                      },
+                      "contract": null,
+                      "fields": [],
+                      "from_oracle": false,
+                      "irreversible": true,
+                      "label": "Adopted",
+                      "node": "comm",
+                      "on_crash": null,
+                      "receiver": "U",
+                      "sender": "Store",
+                      "uses": "write",
+                      "verified": false
+                    },
+                    "contract": null,
+                    "fields": [],
+                    "label": "Attest"
+                  },
+                  {
+                    "consent": false,
+                    "cont": {
+                      "cont": {
+                        "node": "end"
+                      },
+                      "contract": null,
+                      "fields": [],
+                      "from_oracle": false,
+                      "irreversible": false,
+                      "label": "Rejected",
+                      "node": "comm",
+                      "on_crash": null,
+                      "receiver": "U",
+                      "sender": "Store",
+                      "uses": null,
+                      "verified": false
+                    },
+                    "contract": null,
+                    "fields": [],
+                    "label": "Reject"
+                  }
+                ],
+                "node": "choice",
+                "receiver": "Store",
+                "sender": "H"
+              },
+              "contract": {
+                "relation": [
+                  "nonempty",
+                  "note",
+                  null
+                ],
+                "text": "len(note) > 0"
+              },
+              "fields": [
+                {
+                  "name": "note",
+                  "sort": "Str",
+                  "source": null
+                }
+              ],
+              "from_oracle": true,
+              "irreversible": false,
+              "label": "Review",
+              "node": "comm",
+              "on_crash": null,
+              "receiver": "H",
+              "sender": "R",
+              "uses": null,
+              "verified": false
+            },
+            "contract": null,
+            "fields": [
+              {
+                "name": "ok",
+                "sort": "Bool",
+                "source": null
+              }
+            ],
+            "from_oracle": false,
+            "irreversible": false,
+            "label": "Verdict",
+            "node": "comm",
+            "on_crash": null,
+            "receiver": "R",
+            "sender": "V",
+            "uses": null,
+            "verified": true
+          },
+          "contract": {
+            "relation": [
+              "nonempty",
+              "casl",
+              null
+            ],
+            "text": "len(casl) > 0"
+          },
+          "fields": [
+            {
+              "name": "casl",
+              "sort": "Str",
+              "source": null
+            }
+          ],
+          "from_oracle": true,
+          "irreversible": false,
+          "label": "Candidate",
+          "node": "comm",
+          "on_crash": null,
+          "receiver": "V",
+          "sender": "G",
+          "uses": null,
+          "verified": false
+        },
+        "contract": null,
+        "fields": [
+          {
+            "name": "spec",
+            "sort": "Str",
+            "source": null
+          }
+        ],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "Requirement",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "G",
+        "sender": "U",
+        "uses": null,
+        "verified": false
+      },
+      "name": "CaslIdePipeline",
+      "roles": [
+        "U",
+        "G",
+        "V",
+        "R",
+        "H",
+        "Store"
+      ]
+    },
+    "casl": "// =============================================================================\n// casl_ide_pipeline.casl — the IDE describes ITSELF (Phase 5, P0/\"lived system\")\n// =============================================================================\n// The requirement-driven IDE is itself a pipeline of exactly the node kinds\n// it knows — and it passes its OWN gate:\n//\n//   U  user (Requirements = authority)           G  generator oracle (LLM box)\n//   V  verifier (deterministic checker)          R  reviewer oracle (LLM box, Tier 2)\n//   H  human (Tier 3)                            Store  project (irreversible adoption)\n//\n//   · G→V:Candidate  ⟨oracle⟩ [len(casl)>0]  — generator = opaque box, monitored at the boundary.\n//   · V→R:Verdict    ⟨verified⟩              — the checker is the verified program (hull).\n//   · R→H:Review     ⟨oracle⟩ [len(note)>0]  — reviewer = opaque box, monitored.\n//   · Store→U:Adopted ⟨irreversible⟩ behind the `approval` gate (H) — adoption only with attestation.\n//\n// `casl check` accepts this (pipeline-safe + approval-dominated). The IDE's monotone gate\n// requires human attestation for the verified node AND the irreversible adoption\n// (Tier 3) — so the IDE checks itself with its own means.\n//\n//   ./casl check examples/casl_ide_pipeline.casl     # ✓ accepted\n// =============================================================================\nprotocol CaslIdePipeline {\n  roles U, G, V, R, H, Store;\n  agent Store caps { write(artifact) scope \"project:artifacts\" mode write ttl 1 sig \"store1\"; }\n\n  U -> G : Requirement(spec: Str);\n  G -> V : Candidate(casl: Str) [len(casl) > 0] oracle;\n  V -> R : Verdict(ok: Bool) verified;\n  R -> H : Review(note: Str) [len(note) > 0] oracle;\n  choice approval at H -> Store {\n    Attest consent: { Store -> U : Adopted() uses write irreversible; }\n    Reject:         { Store -> U : Rejected(); }\n  }\n}\n"
+  },
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {},
+      "crash": [],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "cont": {
+            "node": "end"
+          },
+          "contract": null,
+          "fields": [],
+          "from_oracle": false,
+          "irreversible": false,
+          "label": "Log",
+          "node": "comm",
+          "on_crash": null,
+          "receiver": "S",
+          "sender": "R",
+          "uses": null,
+          "verified": false
+        },
+        "contract": null,
+        "fields": [],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "Ping",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "Q",
+        "sender": "P",
+        "uses": null,
+        "verified": false
+      },
+      "name": "Concurrent",
+      "roles": [
+        "P",
+        "Q",
+        "R",
+        "S"
+      ]
+    },
+    "casl": "// =============================================================================\n// concurrent.casl — true concurrency (LH-Q-001d), certified\n// =============================================================================\n// Two role-DISJOINT communications: P→Q and R→S share no role, so they are\n// independent and commute (diamond/confluence). Written sequentially,\n// but the endpoints may execute them in any order.\n//\n// `casl check` accepts this only because the global semantics (with the swap rule)\n// fully captures this concurrent behavior ('certified'). Concurrency that\n// the (soundly under-approximating) global semantics does not capture would be rejected —\n// deny-by-default, when in doubt, check.\n//\n//   ./casl check examples/concurrent.casl     # ✓ accepted (4 roles, concurrent)\n// =============================================================================\nprotocol Concurrent {\n  roles P, Q, R, S;\n\n  P -> Q : Ping();\n  R -> S : Log();\n}\n"
+  },
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {
+        "S": [
+          {
+            "mode": "read",
+            "params": [
+              "prompt"
+            ],
+            "scope": "llm:compose",
+            "sigma": "s0",
+            "tool": "compose",
+            "ttl": 1
+          },
+          {
+            "mode": "write",
+            "params": [
+              "to"
+            ],
+            "scope": "mail:send",
+            "sigma": "s1",
+            "tool": "send",
+            "ttl": 1
+          }
+        ]
+      },
+      "crash": [],
+      "env": [
+        "Env"
+      ],
+      "gtype": {
+        "body": {
+          "approval": false,
+          "branches": [
+            {
+              "consent": false,
+              "cont": {
+                "cont": {
+                  "approval": true,
+                  "branches": [
+                    {
+                      "consent": true,
+                      "cont": {
+                        "cont": {
+                          "node": "var",
+                          "var": "Loop"
+                        },
+                        "contract": null,
+                        "fields": [],
+                        "from_oracle": false,
+                        "irreversible": true,
+                        "label": "Deliver",
+                        "node": "comm",
+                        "on_crash": null,
+                        "receiver": "M",
+                        "sender": "S",
+                        "uses": "send",
+                        "verified": false
+                      },
+                      "contract": null,
+                      "fields": [],
+                      "label": "Send"
+                    },
+                    {
+                      "consent": false,
+                      "cont": {
+                        "cont": {
+                          "node": "var",
+                          "var": "Loop"
+                        },
+                        "contract": null,
+                        "fields": [],
+                        "from_oracle": false,
+                        "irreversible": false,
+                        "label": "Archive",
+                        "node": "comm",
+                        "on_crash": null,
+                        "receiver": "M",
+                        "sender": "S",
+                        "uses": null,
+                        "verified": false
+                      },
+                      "contract": null,
+                      "fields": [],
+                      "label": "Skip"
+                    }
+                  ],
+                  "node": "choice",
+                  "receiver": "S",
+                  "sender": "U"
+                },
+                "contract": {
+                  "relation": [
+                    "le",
+                    "size",
+                    "cap"
+                  ],
+                  "text": "size <= cap"
+                },
+                "fields": [
+                  {
+                    "name": "text",
+                    "sort": "Str",
+                    "source": null
+                  },
+                  {
+                    "name": "size",
+                    "sort": "Int",
+                    "source": null
+                  }
+                ],
+                "from_oracle": false,
+                "irreversible": false,
+                "label": "Draft",
+                "node": "comm",
+                "on_crash": null,
+                "receiver": "U",
+                "sender": "S",
+                "uses": "compose",
+                "verified": false
+              },
+              "contract": null,
+              "fields": [
+                {
+                  "name": "subject",
+                  "sort": "Str",
+                  "source": null
+                },
+                {
+                  "name": "cap",
+                  "sort": "Int",
+                  "source": null
+                }
+              ],
+              "label": "Mail"
+            },
+            {
+              "consent": false,
+              "cont": {
+                "cont": {
+                  "cont": {
+                    "node": "end"
+                  },
+                  "contract": null,
+                  "fields": [],
+                  "from_oracle": false,
+                  "irreversible": false,
+                  "label": "Closed",
+                  "node": "comm",
+                  "on_crash": null,
+                  "receiver": "M",
+                  "sender": "S",
+                  "uses": null,
+                  "verified": false
+                },
+                "contract": null,
+                "fields": [],
+                "from_oracle": false,
+                "irreversible": false,
+                "label": "Bye",
+                "node": "comm",
+                "on_crash": null,
+                "receiver": "U",
+                "sender": "S",
+                "uses": null,
+                "verified": false
+              },
+              "contract": null,
+              "fields": [],
+              "label": "Quit"
+            }
+          ],
+          "node": "choice",
+          "receiver": "S",
+          "sender": "Env"
+        },
+        "max_iters": null,
+        "measure": null,
+        "node": "rec",
+        "stream": true,
+        "var": "Loop"
+      },
+      "name": "EmailAssistant",
+      "roles": [
+        "Env",
+        "S",
+        "U",
+        "M"
+      ]
+    },
+    "casl": "// =============================================================================\n// email_assistant.casl — email assistant as an EVENT STREAM (4 roles)\n// =============================================================================\n// Env = inbox (external source), S = assistant (agent/ORACLE),\n// U = User, M = mail connector.\n//\n// For each incoming mail, S drafts a reply via LLM (compose capability,\n// mode read → pure text generation is NOT effect-bearing; the Contract\n// [size <= cap] bounds the length). The SEND, by contrast, is irreversible\n// (uses send, mode write) and lies in the consent branch of an approval gate.\n// The `stream` runs deliberately unbounded, but every handler terminates.\n//\n// Note: the draft here is pure tool use (uses compose), NOT an `oracle`\n// promise. Reason: an oracle promise must be resolved EXACTLY ONCE per loop\n// iteration (promise linearity); in the Quit branch, however, nothing is\n// drafted → 0 times. The monitored oracle boundary is shown by summarize/budgeted_qa.\n//\n//   ./casl check examples/email_assistant.casl\n//   ./casl run   examples/email_assistant.casl --approve\n// =============================================================================\nprotocol EmailAssistant {\n  roles Env, S, U, M;\n  env Env;\n  agent S caps {\n    compose(prompt) scope \"llm:compose\" mode read  ttl 1 sig \"s0\";\n    send(to)        scope \"mail:send\"   mode write ttl 1 sig \"s1\";\n  }\n\n  stream Loop {\n    choice at Env -> S {\n      Mail(subject: Str, cap: Int): {\n        S -> U : Draft(text: Str, size: Int) [size <= cap] uses compose;\n        choice approval at U -> S {\n          Send consent: { S -> M : Deliver() uses send irreversible; continue Loop; }\n          Skip:         { S -> M : Archive();                        continue Loop; }\n        }\n      }\n      Quit: {\n        S -> U : Bye();\n        S -> M : Closed();\n      }\n    }\n  }\n}\n"
+  },
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {
+        "S": [
+          {
+            "mode": "read",
+            "params": [
+              "mail"
+            ],
+            "scope": "mail:readonly",
+            "sigma": "s0",
+            "tool": "inspect",
+            "ttl": 1
+          },
+          {
+            "mode": "read",
+            "params": [
+              "prompt"
+            ],
+            "scope": "llm:compose",
+            "sigma": "s1",
+            "tool": "compose",
+            "ttl": 1
+          },
+          {
+            "mode": "write",
+            "params": [
+              "to"
+            ],
+            "scope": "mail:send",
+            "sigma": "s2",
+            "tool": "send",
+            "ttl": 1
+          }
+        ]
+      },
+      "crash": [],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "cont": {
+            "approval": false,
+            "branches": [
+              {
+                "consent": false,
+                "cont": {
+                  "cont": {
+                    "node": "end"
+                  },
+                  "contract": null,
+                  "fields": [],
+                  "from_oracle": false,
+                  "irreversible": false,
+                  "label": "FileAway",
+                  "node": "comm",
+                  "on_crash": null,
+                  "receiver": "M",
+                  "sender": "S",
+                  "uses": null,
+                  "verified": false
+                },
+                "contract": null,
+                "fields": [],
+                "label": "Reject"
+              },
+              {
+                "consent": false,
+                "cont": {
+                  "cont": {
+                    "approval": true,
+                    "branches": [
+                      {
+                        "consent": true,
+                        "cont": {
+                          "cont": {
+                            "node": "end"
+                          },
+                          "contract": null,
+                          "fields": [],
+                          "from_oracle": false,
+                          "irreversible": true,
+                          "label": "Deliver",
+                          "node": "comm",
+                          "on_crash": null,
+                          "receiver": "M",
+                          "sender": "S",
+                          "uses": "send",
+                          "verified": false
+                        },
+                        "contract": null,
+                        "fields": [],
+                        "label": "Send"
+                      },
+                      {
+                        "consent": false,
+                        "cont": {
+                          "cont": {
+                            "node": "end"
+                          },
+                          "contract": null,
+                          "fields": [],
+                          "from_oracle": false,
+                          "irreversible": false,
+                          "label": "Keep",
+                          "node": "comm",
+                          "on_crash": null,
+                          "receiver": "M",
+                          "sender": "S",
+                          "uses": null,
+                          "verified": false
+                        },
+                        "contract": null,
+                        "fields": [],
+                        "label": "Hold"
+                      }
+                    ],
+                    "node": "choice",
+                    "receiver": "S",
+                    "sender": "U"
+                  },
+                  "contract": {
+                    "relation": [
+                      "le",
+                      "size",
+                      "cap"
+                    ],
+                    "text": "size <= cap"
+                  },
+                  "fields": [
+                    {
+                      "name": "text",
+                      "sort": "Str",
+                      "source": null
+                    },
+                    {
+                      "name": "size",
+                      "sort": "Int",
+                      "source": null
+                    }
+                  ],
+                  "from_oracle": false,
+                  "irreversible": false,
+                  "label": "Draft",
+                  "node": "comm",
+                  "on_crash": null,
+                  "receiver": "U",
+                  "sender": "S",
+                  "uses": "compose",
+                  "verified": false
+                },
+                "contract": null,
+                "fields": [],
+                "label": "Accept"
+              },
+              {
+                "consent": false,
+                "cont": {
+                  "cont": {
+                    "approval": true,
+                    "branches": [
+                      {
+                        "consent": true,
+                        "cont": {
+                          "cont": {
+                            "node": "end"
+                          },
+                          "contract": null,
+                          "fields": [],
+                          "from_oracle": false,
+                          "irreversible": true,
+                          "label": "Deliver",
+                          "node": "comm",
+                          "on_crash": null,
+                          "receiver": "M",
+                          "sender": "S",
+                          "uses": "send",
+                          "verified": false
+                        },
+                        "contract": null,
+                        "fields": [],
+                        "label": "Send"
+                      },
+                      {
+                        "consent": false,
+                        "cont": {
+                          "cont": {
+                            "node": "end"
+                          },
+                          "contract": null,
+                          "fields": [],
+                          "from_oracle": false,
+                          "irreversible": false,
+                          "label": "Keep",
+                          "node": "comm",
+                          "on_crash": null,
+                          "receiver": "M",
+                          "sender": "S",
+                          "uses": null,
+                          "verified": false
+                        },
+                        "contract": null,
+                        "fields": [],
+                        "label": "Hold"
+                      }
+                    ],
+                    "node": "choice",
+                    "receiver": "S",
+                    "sender": "U"
+                  },
+                  "contract": {
+                    "relation": [
+                      "le",
+                      "size",
+                      "cap"
+                    ],
+                    "text": "size <= cap"
+                  },
+                  "fields": [
+                    {
+                      "name": "text",
+                      "sort": "Str",
+                      "source": null
+                    },
+                    {
+                      "name": "size",
+                      "sort": "Int",
+                      "source": null
+                    }
+                  ],
+                  "from_oracle": false,
+                  "irreversible": false,
+                  "label": "Short",
+                  "node": "comm",
+                  "on_crash": null,
+                  "receiver": "U",
+                  "sender": "S",
+                  "uses": "compose",
+                  "verified": false
+                },
+                "contract": null,
+                "fields": [],
+                "label": "Analyze"
+              },
+              {
+                "consent": false,
+                "cont": {
+                  "cont": {
+                    "approval": true,
+                    "branches": [
+                      {
+                        "consent": true,
+                        "cont": {
+                          "cont": {
+                            "node": "end"
+                          },
+                          "contract": null,
+                          "fields": [],
+                          "from_oracle": false,
+                          "irreversible": true,
+                          "label": "Deliver",
+                          "node": "comm",
+                          "on_crash": null,
+                          "receiver": "M",
+                          "sender": "S",
+                          "uses": "send",
+                          "verified": false
+                        },
+                        "contract": null,
+                        "fields": [],
+                        "label": "Send"
+                      },
+                      {
+                        "consent": false,
+                        "cont": {
+                          "cont": {
+                            "node": "end"
+                          },
+                          "contract": null,
+                          "fields": [],
+                          "from_oracle": false,
+                          "irreversible": false,
+                          "label": "Keep",
+                          "node": "comm",
+                          "on_crash": null,
+                          "receiver": "M",
+                          "sender": "S",
+                          "uses": null,
+                          "verified": false
+                        },
+                        "contract": null,
+                        "fields": [],
+                        "label": "Hold"
+                      }
+                    ],
+                    "node": "choice",
+                    "receiver": "S",
+                    "sender": "U"
+                  },
+                  "contract": {
+                    "relation": [
+                      "le",
+                      "size",
+                      "cap"
+                    ],
+                    "text": "size <= cap"
+                  },
+                  "fields": [
+                    {
+                      "name": "text",
+                      "sort": "Str",
+                      "source": null
+                    },
+                    {
+                      "name": "size",
+                      "sort": "Int",
+                      "source": null
+                    }
+                  ],
+                  "from_oracle": false,
+                  "irreversible": false,
+                  "label": "Reply",
+                  "node": "comm",
+                  "on_crash": null,
+                  "receiver": "U",
+                  "sender": "S",
+                  "uses": "compose",
+                  "verified": false
+                },
+                "contract": null,
+                "fields": [],
+                "label": "Direct"
+              }
+            ],
+            "node": "choice",
+            "receiver": "S",
+            "sender": "U"
+          },
+          "contract": {
+            "relation": [
+              "le",
+              "size",
+              "cap"
+            ],
+            "text": "size <= cap"
+          },
+          "fields": [
+            {
+              "name": "summary",
+              "sort": "Str",
+              "source": null
+            },
+            {
+              "name": "size",
+              "sort": "Int",
+              "source": null
+            }
+          ],
+          "from_oracle": true,
+          "irreversible": false,
+          "label": "Brief",
+          "node": "comm",
+          "on_crash": null,
+          "receiver": "U",
+          "sender": "S",
+          "uses": "inspect",
+          "verified": false
+        },
+        "contract": null,
+        "fields": [
+          {
+            "name": "subject",
+            "sort": "Str",
+            "source": null
+          },
+          {
+            "name": "cap",
+            "sort": "Int",
+            "source": null
+          }
+        ],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "Arrived",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "S",
+        "sender": "M",
+        "uses": null,
+        "verified": false
+      },
+      "name": "EmailSecretaryReply",
+      "roles": [
+        "U",
+        "S",
+        "M"
+      ]
+    },
+    "casl": "// =============================================================================\n// email_secretary_reply.casl — the FOUR-BUTTON reply flow (case study)\n// See docs/cookbook/email-secretary.md\n// =============================================================================\n// U = User, S = secretary agent (LLM-backed), M = mail connector.\n//\n// S summarizes the incoming mail (monitored `oracle` boundary, bounded by [len <= cap]).\n// Then U presses ONE of four buttons (a `choice at U -> S`):\n//   Reject  — no reply, just file the mail away.\n//   Accept  — LLM drafts an acceptance; the SEND is irreversible → approval gate.\n//   Analyze — LLM analyzes the work, measures it against standards, drafts a SHORT\n//             reply; the SEND is irreversible → approval gate.\n//   Direct  — LLM drafts a direct reply; the SEND is irreversible → approval gate.\n//\n// Safety: every effect-bearing SEND (uses send, mode write) is irreversible and\n// sits in the `consent` branch of an approval gate (LH-Q-011). M (mail connector)\n// receives a distinguishing label on every path (FileAway / Deliver / Keep) → realizable.\n//\n//   ./casl check examples/email_secretary_reply.casl\n//   ./casl run   examples/email_secretary_reply.casl --approve\n// =============================================================================\nprotocol EmailSecretaryReply {\n  roles U, S, M;\n  agent S caps {\n    inspect(mail)   scope \"mail:readonly\" mode read  ttl 1 sig \"s0\";\n    compose(prompt) scope \"llm:compose\"   mode read  ttl 1 sig \"s1\";\n    send(to)        scope \"mail:send\"     mode write ttl 1 sig \"s2\";\n  }\n\n  M -> S : Arrived(subject: Str, cap: Int);\n  S -> U : Brief(summary: Str, size: Int) [size <= cap] uses inspect oracle;\n  choice at U -> S {\n    Reject: {\n      S -> M : FileAway();\n    }\n    Accept: {\n      S -> U : Draft(text: Str, size: Int) [size <= cap] uses compose;\n      choice approval at U -> S {\n        Send consent: { S -> M : Deliver() uses send irreversible; }\n        Hold:         { S -> M : Keep(); }\n      }\n    }\n    Analyze: {\n      S -> U : Short(text: Str, size: Int) [size <= cap] uses compose;\n      choice approval at U -> S {\n        Send consent: { S -> M : Deliver() uses send irreversible; }\n        Hold:         { S -> M : Keep(); }\n      }\n    }\n    Direct: {\n      S -> U : Reply(text: Str, size: Int) [size <= cap] uses compose;\n      choice approval at U -> S {\n        Send consent: { S -> M : Deliver() uses send irreversible; }\n        Hold:         { S -> M : Keep(); }\n      }\n    }\n  }\n}\n"
+  },
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {
+        "A": [
+          {
+            "mode": "read",
+            "params": [
+              "receipt"
+            ],
+            "scope": "doc:readonly",
+            "sigma": "a0",
+            "tool": "read",
+            "ttl": 1
+          },
+          {
+            "mode": "write",
+            "params": [
+              "entry"
+            ],
+            "scope": "ledger:write",
+            "sigma": "a1",
+            "tool": "ledger",
+            "ttl": 1
+          }
+        ]
+      },
+      "crash": [],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "cont": {
+            "approval": true,
+            "branches": [
+              {
+                "consent": true,
+                "cont": {
+                  "cont": {
+                    "node": "end"
+                  },
+                  "contract": null,
+                  "fields": [],
+                  "from_oracle": false,
+                  "irreversible": true,
+                  "label": "Book",
+                  "node": "comm",
+                  "on_crash": null,
+                  "receiver": "L",
+                  "sender": "A",
+                  "uses": "ledger",
+                  "verified": false
+                },
+                "contract": null,
+                "fields": [],
+                "label": "Approve"
+              },
+              {
+                "consent": false,
+                "cont": {
+                  "cont": {
+                    "node": "end"
+                  },
+                  "contract": null,
+                  "fields": [],
+                  "from_oracle": false,
+                  "irreversible": false,
+                  "label": "Discard",
+                  "node": "comm",
+                  "on_crash": null,
+                  "receiver": "L",
+                  "sender": "A",
+                  "uses": null,
+                  "verified": false
+                },
+                "contract": null,
+                "fields": [],
+                "label": "Deny"
+              }
+            ],
+            "node": "choice",
+            "receiver": "A",
+            "sender": "U"
+          },
+          "contract": {
+            "relation": [
+              "le",
+              "amount",
+              "limit"
+            ],
+            "text": "amount <= limit"
+          },
+          "fields": [
+            {
+              "name": "amount",
+              "sort": "Int",
+              "source": null
+            }
+          ],
+          "from_oracle": true,
+          "irreversible": false,
+          "label": "Claim",
+          "node": "comm",
+          "on_crash": null,
+          "receiver": "U",
+          "sender": "A",
+          "uses": "read",
+          "verified": false
+        },
+        "contract": null,
+        "fields": [
+          {
+            "name": "receipt",
+            "sort": "Str",
+            "source": null
+          },
+          {
+            "name": "limit",
+            "sort": "Int",
+            "source": null
+          }
+        ],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "Submit",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "A",
+        "sender": "U",
+        "uses": null,
+        "verified": false
+      },
+      "name": "ExpenseApproval",
+      "roles": [
+        "U",
+        "A",
+        "L"
+      ]
+    },
+    "casl": "// =============================================================================\n// expense_approval.casl — expense approval (3 roles, classic business flow)\n// =============================================================================\n// A = assistant (agent/ORACLE), U = User/approver, L = Ledger (accounting system).\n//\n// Flow:\n//   1. U submits a receipt and states a limit.\n//   2. A reads the receipt (read capability, NOT effect-bearing) and extracts\n//      the amount via LLM. The data Contract [amount <= limit] MUST hold.\n//   3. The BOOKING is irreversible (uses ledger, mode write) and therefore lies\n//      in the consent branch of an approval gate. L sees in BOTH branches a\n//      distinguishing label (Book/Discard) → projectable.\n//\n//   ./casl check examples/expense_approval.casl\n//   ./casl run   examples/expense_approval.casl --approve\n// =============================================================================\nprotocol ExpenseApproval {\n  roles U, A, L;\n  agent A caps {\n    read(receipt)  scope \"doc:readonly\"  mode read  ttl 1 sig \"a0\";\n    ledger(entry)  scope \"ledger:write\"  mode write ttl 1 sig \"a1\";\n  }\n\n  U -> A : Submit(receipt: Str, limit: Int);\n  A -> U : Claim(amount: Int) [amount <= limit] uses read oracle;\n  choice approval at U -> A {\n    Approve consent: { A -> L : Book() uses ledger irreversible; }\n    Deny:            { A -> L : Discard(); }\n  }\n}\n"
+  },
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {
+        "S": [
+          {
+            "mode": "write",
+            "params": [
+              "to"
+            ],
+            "scope": "mail:send",
+            "sigma": "s1",
+            "tool": "mail",
+            "ttl": 1
+          }
+        ]
+      },
+      "crash": [],
+      "env": [
+        "Env"
+      ],
+      "gtype": {
+        "body": {
+          "approval": false,
+          "branches": [
+            {
+              "consent": false,
+              "cont": {
+                "cont": {
+                  "approval": true,
+                  "branches": [
+                    {
+                      "consent": true,
+                      "cont": {
+                        "cont": {
+                          "node": "var",
+                          "var": "Loop"
+                        },
+                        "contract": null,
+                        "fields": [],
+                        "from_oracle": false,
+                        "irreversible": false,
+                        "label": "Send",
+                        "node": "comm",
+                        "on_crash": null,
+                        "receiver": "M",
+                        "sender": "S",
+                        "uses": "mail",
+                        "verified": false
+                      },
+                      "contract": null,
+                      "fields": [],
+                      "label": "Approve"
+                    },
+                    {
+                      "consent": false,
+                      "cont": {
+                        "cont": {
+                          "node": "var",
+                          "var": "Loop"
+                        },
+                        "contract": null,
+                        "fields": [],
+                        "from_oracle": false,
+                        "irreversible": false,
+                        "label": "Drop",
+                        "node": "comm",
+                        "on_crash": null,
+                        "receiver": "M",
+                        "sender": "S",
+                        "uses": null,
+                        "verified": false
+                      },
+                      "contract": null,
+                      "fields": [],
+                      "label": "Deny"
+                    }
+                  ],
+                  "node": "choice",
+                  "receiver": "S",
+                  "sender": "U"
+                },
+                "contract": null,
+                "fields": [
+                  {
+                    "name": "detail",
+                    "sort": "Str",
+                    "source": null
+                  }
+                ],
+                "from_oracle": false,
+                "irreversible": false,
+                "label": "Notice",
+                "node": "comm",
+                "on_crash": null,
+                "receiver": "U",
+                "sender": "S",
+                "uses": null,
+                "verified": false
+              },
+              "contract": null,
+              "fields": [
+                {
+                  "name": "subject",
+                  "sort": "Str",
+                  "source": null
+                }
+              ],
+              "label": "Mail"
+            },
+            {
+              "consent": false,
+              "cont": {
+                "cont": {
+                  "cont": {
+                    "node": "end"
+                  },
+                  "contract": null,
+                  "fields": [],
+                  "from_oracle": false,
+                  "irreversible": false,
+                  "label": "Closed",
+                  "node": "comm",
+                  "on_crash": null,
+                  "receiver": "M",
+                  "sender": "S",
+                  "uses": null,
+                  "verified": false
+                },
+                "contract": null,
+                "fields": [],
+                "from_oracle": false,
+                "irreversible": false,
+                "label": "Bye",
+                "node": "comm",
+                "on_crash": null,
+                "receiver": "U",
+                "sender": "S",
+                "uses": null,
+                "verified": false
+              },
+              "contract": null,
+              "fields": [],
+              "label": "Quit"
+            }
+          ],
+          "node": "choice",
+          "receiver": "S",
+          "sender": "Env"
+        },
+        "max_iters": null,
+        "measure": null,
+        "node": "rec",
+        "stream": true,
+        "var": "Loop"
+      },
+      "name": "Inbox",
+      "roles": [
+        "Env",
+        "S",
+        "U",
+        "M"
+      ]
+    },
+    "casl": "// =============================================================================\n// inbox.casl — inbox as an EVENT STREAM (LH-F-009), target-picture slice\n// =============================================================================\n// Env = environment (external event source: new mail / quit), S = secretary,\n// U = User, M = mail connector.\n//\n// The `stream` loop runs DELIBERATELY unbounded (an inbox does not end on its\n// own) — but EVERY handler is finite and certified: the irreversible\n// send (uses mail) lies behind an approval gate (LH-Q-011), and every role\n// learns in every branch via a message from S which case applies (realizable).\n//\n//   ./casl check examples/inbox.casl              # ✓ accepted (stream, 4 roles)\n//   ./casl run   examples/inbox.casl --approve    # one event handled per iteration\n// =============================================================================\nprotocol Inbox {\n  roles Env, S, U, M;\n  env Env;\n  agent S caps { mail(to) scope \"mail:send\" mode write ttl 1 sig \"s1\"; }\n\n  stream Loop {\n    choice at Env -> S {\n      Mail(subject: Str): {\n        S -> U : Notice(detail: Str);\n        choice approval at U -> S {\n          Approve consent: { S -> M : Send() uses mail; continue Loop; }\n          Deny:            { S -> M : Drop(); continue Loop; }\n        }\n      }\n      Quit: {\n        S -> U : Bye();\n        S -> M : Closed();\n      }\n    }\n  }\n}\n"
+  },
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {
+        "S": [
+          {
+            "mode": "read",
+            "params": [
+              "constraint"
+            ],
+            "scope": "cal:read",
+            "sigma": "s0",
+            "tool": "plan",
+            "ttl": 3
+          },
+          {
+            "mode": "write",
+            "params": [
+              "event"
+            ],
+            "scope": "cal:write",
+            "sigma": "s1",
+            "tool": "calendar",
+            "ttl": 1
+          }
+        ]
+      },
+      "crash": [],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "body": {
+            "cont": {
+              "approval": false,
+              "branches": [
+                {
+                  "consent": false,
+                  "cont": {
+                    "approval": true,
+                    "branches": [
+                      {
+                        "consent": true,
+                        "cont": {
+                          "cont": {
+                            "node": "end"
+                          },
+                          "contract": null,
+                          "fields": [],
+                          "from_oracle": false,
+                          "irreversible": true,
+                          "label": "Reserve",
+                          "node": "comm",
+                          "on_crash": null,
+                          "receiver": "K",
+                          "sender": "S",
+                          "uses": "calendar",
+                          "verified": false
+                        },
+                        "contract": null,
+                        "fields": [],
+                        "label": "Book"
+                      },
+                      {
+                        "consent": false,
+                        "cont": {
+                          "cont": {
+                            "node": "end"
+                          },
+                          "contract": null,
+                          "fields": [],
+                          "from_oracle": false,
+                          "irreversible": false,
+                          "label": "Pass",
+                          "node": "comm",
+                          "on_crash": null,
+                          "receiver": "K",
+                          "sender": "S",
+                          "uses": null,
+                          "verified": false
+                        },
+                        "contract": null,
+                        "fields": [],
+                        "label": "Hold"
+                      }
+                    ],
+                    "node": "choice",
+                    "receiver": "S",
+                    "sender": "U"
+                  },
+                  "contract": null,
+                  "fields": [],
+                  "label": "Accept"
+                },
+                {
+                  "consent": false,
+                  "cont": {
+                    "cont": {
+                      "cont": {
+                        "node": "var",
+                        "var": "Loop"
+                      },
+                      "contract": null,
+                      "fields": [
+                        {
+                          "name": "maxTries",
+                          "sort": "Int",
+                          "source": null
+                        }
+                      ],
+                      "from_oracle": false,
+                      "irreversible": false,
+                      "label": "Retry",
+                      "node": "comm",
+                      "on_crash": null,
+                      "receiver": "S",
+                      "sender": "U",
+                      "uses": null,
+                      "verified": false
+                    },
+                    "contract": null,
+                    "fields": [],
+                    "from_oracle": false,
+                    "irreversible": false,
+                    "label": "Searching",
+                    "node": "comm",
+                    "on_crash": null,
+                    "receiver": "K",
+                    "sender": "S",
+                    "uses": null,
+                    "verified": false
+                  },
+                  "contract": {
+                    "relation": [
+                      "nonempty",
+                      "reason",
+                      null
+                    ],
+                    "text": "len(reason) > 0"
+                  },
+                  "fields": [
+                    {
+                      "name": "reason",
+                      "sort": "Str",
+                      "source": null
+                    }
+                  ],
+                  "label": "Reject"
+                }
+              ],
+              "node": "choice",
+              "receiver": "S",
+              "sender": "U"
+            },
+            "contract": {
+              "relation": [
+                "le",
+                "cost",
+                "budget"
+              ],
+              "text": "cost <= budget"
+            },
+            "fields": [
+              {
+                "name": "slot",
+                "sort": "Str",
+                "source": null
+              },
+              {
+                "name": "cost",
+                "sort": "Int",
+                "source": null
+              }
+            ],
+            "from_oracle": true,
+            "irreversible": false,
+            "label": "Propose",
+            "node": "comm",
+            "on_crash": null,
+            "receiver": "U",
+            "sender": "S",
+            "uses": "plan",
+            "verified": false
+          },
+          "max_iters": 3,
+          "measure": "maxTries",
+          "node": "rec",
+          "stream": false,
+          "var": "Loop"
+        },
+        "contract": null,
+        "fields": [
+          {
+            "name": "constraint",
+            "sort": "Str",
+            "source": null
+          },
+          {
+            "name": "budget",
+            "sort": "Int",
+            "source": null
+          },
+          {
+            "name": "maxTries",
+            "sort": "Int",
+            "source": null
+          }
+        ],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "Request",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "S",
+        "sender": "U",
+        "uses": null,
+        "verified": false
+      },
+      "name": "MeetingScheduler",
+      "roles": [
+        "U",
+        "S",
+        "K"
+      ]
+    },
+    "casl": "// =============================================================================\n// meeting_scheduler.casl — appointment finding with a retry loop + approval (3 roles)\n// =============================================================================\n// U = User, S = secretary (agent/ORACLE), K = calendar.\n//\n// S proposes a slot via LLM (plan capability, mode read) with Contract\n// [cost <= budget]. U accepts or rejects with a reason → new round\n// (rec with termination measure `measure maxTries bound 3`). In the Accept branch,\n// the irreversible calendar booking lies behind an approval gate.\n//\n// Note: CASL allows NO statement AFTER a `rec` block. The booking\n// must therefore be IN the Accept branch (not behind the loop). So that K\n// (calendar) can distinguish the loop outcome, it receives in EVERY\n// branch a message: Reserve/Pass (Accept) or Searching (Reject).\n//\n//   ./casl check examples/meeting_scheduler.casl\n//   ./casl run   examples/meeting_scheduler.casl --approve\n// =============================================================================\nprotocol MeetingScheduler {\n  roles U, S, K;\n  agent S caps {\n    plan(constraint) scope \"cal:read\"  mode read  ttl 3 sig \"s0\";\n    calendar(event)  scope \"cal:write\" mode write ttl 1 sig \"s1\";\n  }\n\n  U -> S : Request(constraint: Str, budget: Int, maxTries: Int);\n  rec Loop measure maxTries bound 3 {\n    S -> U : Propose(slot: Str, cost: Int) [cost <= budget] uses plan oracle;\n    choice at U -> S {\n      Accept: {\n        choice approval at U -> S {\n          Book consent: { S -> K : Reserve() uses calendar irreversible; }\n          Hold:         { S -> K : Pass(); }\n        }\n      }\n      Reject(reason: Str) [len(reason) > 0]: {\n        S -> K : Searching();\n        U -> S : Retry(maxTries: Int);\n        continue Loop;\n      }\n    }\n  }\n}\n"
+  },
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {},
+      "crash": [],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "cont": {
+            "approval": false,
+            "branches": [
+              {
+                "consent": false,
+                "cont": {
+                  "node": "end"
+                },
+                "contract": null,
+                "fields": [],
+                "label": "Accept"
+              },
+              {
+                "consent": false,
+                "cont": {
+                  "cont": {
+                    "node": "end"
+                  },
+                  "contract": null,
+                  "fields": [],
+                  "from_oracle": false,
+                  "irreversible": false,
+                  "label": "Retry",
+                  "node": "comm",
+                  "on_crash": null,
+                  "receiver": "A",
+                  "sender": "J",
+                  "uses": null,
+                  "verified": false
+                },
+                "contract": null,
+                "fields": [
+                  {
+                    "name": "reason",
+                    "sort": "Str",
+                    "source": null
+                  }
+                ],
+                "label": "Reject"
+              }
+            ],
+            "node": "choice",
+            "receiver": "C",
+            "sender": "J"
+          },
+          "contract": null,
+          "fields": [
+            {
+              "name": "answer",
+              "sort": "Str",
+              "source": null
+            },
+            {
+              "name": "cost",
+              "sort": "Int",
+              "source": null
+            }
+          ],
+          "from_oracle": false,
+          "irreversible": false,
+          "label": "Draft",
+          "node": "comm",
+          "on_crash": null,
+          "receiver": "J",
+          "sender": "A",
+          "uses": null,
+          "verified": false
+        },
+        "contract": null,
+        "fields": [
+          {
+            "name": "question",
+            "sort": "Str",
+            "source": null
+          },
+          {
+            "name": "budget",
+            "sort": "Int",
+            "source": null
+          }
+        ],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "Request",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "A",
+        "sender": "C",
+        "uses": null,
+        "verified": false
+      },
+      "name": "NonProjectable",
+      "roles": [
+        "C",
+        "A",
+        "J"
+      ]
+    },
+    "casl": "// INTENTIONALLY FAULTY — demonstration of the well-formedness diagnostics.\n// J decides the choice toward C. In the Accept branch A learns nothing, in the\n// Reject branch A receives `Retry`. A cannot distinguish the branches locally\n// (non-local choice) → not projectable (MUST).\n// `casl check` MUST reject with exit 1.\nprotocol NonProjectable {\n  roles C, A, J;\n\n  C -> A : Request(question: Str, budget: Int);\n  A -> J : Draft(answer: Str, cost: Int);\n  choice at J -> C {\n    Accept: { }\n    Reject(reason: Str): { J -> A : Retry(); }\n  }\n}\n"
+  },
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {
+        "Q": [
+          {
+            "mode": "read",
+            "params": [
+              "prompt"
+            ],
+            "scope": "gen",
+            "sigma": "q1",
+            "tool": "llm",
+            "ttl": 1
+          }
+        ]
+      },
+      "crash": [],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "cont": {
+            "cont": {
+              "node": "end"
+            },
+            "contract": {
+              "relation": [
+                "le",
+                "cost",
+                100
+              ],
+              "text": "cost <= 100"
+            },
+            "fields": [
+              {
+                "name": "text",
+                "sort": "Str",
+                "source": null
+              },
+              {
+                "name": "cost",
+                "sort": "Int",
+                "source": null
+              }
+            ],
+            "from_oracle": true,
+            "irreversible": false,
+            "label": "Answer",
+            "node": "comm",
+            "on_crash": null,
+            "receiver": "U",
+            "sender": "Q",
+            "uses": "llm",
+            "verified": false
+          },
+          "contract": null,
+          "fields": [
+            {
+              "name": "data",
+              "sort": "Str",
+              "source": null
+            }
+          ],
+          "from_oracle": false,
+          "irreversible": false,
+          "label": "Prepared",
+          "node": "comm",
+          "on_crash": null,
+          "receiver": "Q",
+          "sender": "P",
+          "uses": null,
+          "verified": true
+        },
+        "contract": null,
+        "fields": [
+          {
+            "name": "spec",
+            "sort": "Str",
+            "source": null
+          }
+        ],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "Task",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "P",
+        "sender": "U",
+        "uses": null,
+        "verified": false
+      },
+      "name": "PipelineMixed",
+      "roles": [
+        "U",
+        "P",
+        "Q"
+      ]
+    },
+    "casl": "// =============================================================================\n// pipeline_mixed.casl — pipeline of two node kinds (LH-F-011, CASL-IDE Phase 4)\n// =============================================================================\n// A small pipeline: U gives a task, P is a VERIFIED (deterministic)\n// program that prepares the input, Q is an LLM BOX whose response is checked\n// against a Contract at the monitored boundary.\n//\n//   · P→Q:Prepared  ⟨verified⟩  — producer is a verified program (inside the hull).\n//   · Q→U:Answer     ⟨oracle⟩ [cost <= 100] — opaque LLM box, WITH a Contract (monitored boundary).\n//\n// `casl check` accepts this (pipeline-safe: oracle monitored, oracle⊕verified exclusive).\n// In the IDE the `verified` node additionally requires HUMAN attestation (Tier 3) —\n// the machine cannot prove an arbitrary external program (W17).\n//\n//   ./casl check examples/pipeline_mixed.casl     # ✓ accepted\n// =============================================================================\nprotocol PipelineMixed {\n  roles U, P, Q;\n  agent Q caps { llm(prompt) scope \"gen\" mode read ttl 1 sig \"q1\"; }\n\n  U -> P : Task(spec: Str);\n  P -> Q : Prepared(data: Str) verified;\n  Q -> U : Answer(text: Str, cost: Int) [cost <= 100] uses llm oracle;\n}\n"
+  },
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {
+        "S": [
+          {
+            "mode": "write",
+            "params": [
+              "event"
+            ],
+            "scope": "cal:write",
+            "sigma": "s1",
+            "tool": "calendar",
+            "ttl": 1
+          }
+        ]
+      },
+      "crash": [],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "approval": true,
+          "branches": [
+            {
+              "consent": true,
+              "cont": {
+                "cont": {
+                  "node": "end"
+                },
+                "contract": null,
+                "fields": [],
+                "from_oracle": false,
+                "irreversible": true,
+                "label": "Move",
+                "node": "comm",
+                "on_crash": null,
+                "receiver": "K",
+                "sender": "S",
+                "uses": "calendar",
+                "verified": false
+              },
+              "contract": null,
+              "fields": [],
+              "label": "Approve"
+            },
+            {
+              "consent": false,
+              "cont": {
+                "cont": {
+                  "node": "end"
+                },
+                "contract": null,
+                "fields": [],
+                "from_oracle": false,
+                "irreversible": false,
+                "label": "Skip",
+                "node": "comm",
+                "on_crash": null,
+                "receiver": "K",
+                "sender": "S",
+                "uses": null,
+                "verified": false
+              },
+              "contract": null,
+              "fields": [],
+              "label": "Deny"
+            }
+          ],
+          "node": "choice",
+          "receiver": "S",
+          "sender": "U"
+        },
+        "contract": null,
+        "fields": [
+          {
+            "name": "detail",
+            "sort": "Str",
+            "source": null
+          }
+        ],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "Conflict",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "U",
+        "sender": "S",
+        "uses": null,
+        "verified": false
+      },
+      "name": "Reschedule",
+      "roles": [
+        "S",
+        "U",
+        "K"
+      ]
+    },
+    "casl": "// Appointment rescheduling with an approval gate (LH-Q-011).\n// The irreversible calendar action `Move` sits behind the `approval` gate (U decides),\n// only in the Approve branch. K (calendar) learns a distinguishing label in BOTH branches\n// (Move/Skip) → projectable. `casl check` → accepted.\nprotocol Reschedule {\n  roles S, U, K;\n  agent S caps { calendar(event) scope \"cal:write\" ttl 1 sig \"s1\"; }\n\n  S -> U : Conflict(detail: Str);\n  choice approval at U -> S {\n    Approve consent: { S -> K : Move() uses calendar irreversible; }\n    Deny:            { S -> K : Skip(); }\n  }\n}\n"
+  },
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {
+        "S": [
+          {
+            "mode": "write",
+            "params": [
+              "event"
+            ],
+            "scope": "cal:write",
+            "sigma": "s1",
+            "tool": "calendar",
+            "ttl": 1
+          }
+        ]
+      },
+      "crash": [],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "cont": {
+            "node": "end"
+          },
+          "contract": null,
+          "fields": [],
+          "from_oracle": false,
+          "irreversible": true,
+          "label": "Move",
+          "node": "comm",
+          "on_crash": null,
+          "receiver": "K",
+          "sender": "S",
+          "uses": "calendar",
+          "verified": false
+        },
+        "contract": null,
+        "fields": [
+          {
+            "name": "detail",
+            "sort": "Str",
+            "source": null
+          }
+        ],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "Conflict",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "U",
+        "sender": "S",
+        "uses": null,
+        "verified": false
+      },
+      "name": "RescheduleBad",
+      "roles": [
+        "S",
+        "U",
+        "K"
+      ]
+    },
+    "casl": "// INTENTIONALLY FAULTY — demonstration of the approval invariant (LH-Q-011).\n// The irreversible `Move` (change the calendar) happens WITHOUT a preceding approval gate.\n// `casl check` MUST reject with exit 1 (approval dominance violated).\nprotocol RescheduleBad {\n  roles S, U, K;\n  agent S caps { calendar(event) scope \"cal:write\" ttl 1 sig \"s1\"; }\n\n  S -> U : Conflict(detail: Str);\n  S -> K : Move() uses calendar irreversible;\n}\n"
+  },
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {
+        "S": [
+          {
+            "mode": "write",
+            "params": [
+              "event"
+            ],
+            "scope": "cal:write",
+            "sigma": "s1",
+            "tool": "calendar",
+            "ttl": 1
+          },
+          {
+            "mode": "write",
+            "params": [
+              "to"
+            ],
+            "scope": "mail:send",
+            "sigma": "s2",
+            "tool": "mail",
+            "ttl": 1
+          }
+        ]
+      },
+      "crash": [],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "approval": true,
+          "branches": [
+            {
+              "consent": true,
+              "cont": {
+                "cont": {
+                  "cont": {
+                    "cont": {
+                      "node": "end"
+                    },
+                    "contract": null,
+                    "fields": [],
+                    "from_oracle": false,
+                    "irreversible": false,
+                    "label": "Done",
+                    "node": "comm",
+                    "on_crash": null,
+                    "receiver": "U",
+                    "sender": "M",
+                    "uses": null,
+                    "verified": false
+                  },
+                  "contract": null,
+                  "fields": [],
+                  "from_oracle": false,
+                  "irreversible": false,
+                  "label": "Notify",
+                  "node": "comm",
+                  "on_crash": null,
+                  "receiver": "M",
+                  "sender": "S",
+                  "uses": "mail",
+                  "verified": false
+                },
+                "contract": null,
+                "fields": [],
+                "from_oracle": false,
+                "irreversible": true,
+                "label": "Move",
+                "node": "comm",
+                "on_crash": null,
+                "receiver": "K",
+                "sender": "S",
+                "uses": "calendar",
+                "verified": false
+              },
+              "contract": null,
+              "fields": [],
+              "label": "Approve"
+            },
+            {
+              "consent": false,
+              "cont": {
+                "cont": {
+                  "cont": {
+                    "cont": {
+                      "node": "end"
+                    },
+                    "contract": null,
+                    "fields": [],
+                    "from_oracle": false,
+                    "irreversible": false,
+                    "label": "Done",
+                    "node": "comm",
+                    "on_crash": null,
+                    "receiver": "U",
+                    "sender": "M",
+                    "uses": null,
+                    "verified": false
+                  },
+                  "contract": null,
+                  "fields": [],
+                  "from_oracle": false,
+                  "irreversible": false,
+                  "label": "Hold",
+                  "node": "comm",
+                  "on_crash": null,
+                  "receiver": "M",
+                  "sender": "S",
+                  "uses": null,
+                  "verified": false
+                },
+                "contract": null,
+                "fields": [],
+                "from_oracle": false,
+                "irreversible": false,
+                "label": "Keep",
+                "node": "comm",
+                "on_crash": null,
+                "receiver": "K",
+                "sender": "S",
+                "uses": null,
+                "verified": false
+              },
+              "contract": null,
+              "fields": [],
+              "label": "Deny"
+            }
+          ],
+          "node": "choice",
+          "receiver": "S",
+          "sender": "U"
+        },
+        "contract": null,
+        "fields": [
+          {
+            "name": "detail",
+            "sort": "Str",
+            "source": null
+          }
+        ],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "Conflict",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "S",
+        "sender": "U",
+        "uses": null,
+        "verified": false
+      },
+      "name": "Secretariat",
+      "roles": [
+        "U",
+        "S",
+        "K",
+        "M"
+      ]
+    },
+    "casl": "// =============================================================================\n// secretariat.casl — FOUR roles (target-picture slice, VISION §6)\n// =============================================================================\n// U = User, S = secretary (agent/oracle), K = calendar, M = mail.\n// Shows that CASL is expressible beyond the 3-role head fragment:\n// projection/merge/realizability are parametric over the role set.\n//\n// Safety applies as before: the irreversible rescheduling (Move, uses calendar)\n// and the mail send (Notify, uses mail) lie in the consent branch of an\n// approval gate (LH-Q-011). Realizable: in BOTH branches the\n// bystanders K and M each receive a distinguishing message from S (mergeable).\n//\n//   ./casl check examples/secretariat.casl          # ✓ accepted (4 roles)\n//   ./casl run   examples/secretariat.casl --approve # consent branch runs\n// =============================================================================\nprotocol Secretariat {\n  roles U, S, K, M;\n  agent S caps {\n    calendar(event) scope \"cal:write\" mode write ttl 1 sig \"s1\";\n    mail(to) scope \"mail:send\" mode write ttl 1 sig \"s2\";\n  }\n\n  U -> S : Conflict(detail: Str);\n  choice approval at U -> S {\n    Approve consent: {\n      S -> K : Move() uses calendar irreversible;\n      S -> M : Notify() uses mail;\n      M -> U : Done();\n    }\n    Deny: {\n      S -> K : Keep();\n      S -> M : Hold();\n      M -> U : Done();\n    }\n  }\n}\n"
+  },
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {
+        "S": [
+          {
+            "mode": "read",
+            "params": [
+              "doc"
+            ],
+            "scope": "doc:readonly",
+            "sigma": "s1",
+            "tool": "read",
+            "ttl": 2
+          }
+        ]
+      },
+      "crash": [],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "body": {
+            "cont": {
+              "approval": false,
+              "branches": [
+                {
+                  "consent": false,
+                  "cont": {
+                    "cont": {
+                      "node": "end"
+                    },
+                    "contract": null,
+                    "fields": [],
+                    "from_oracle": false,
+                    "irreversible": false,
+                    "label": "Take",
+                    "node": "comm",
+                    "on_crash": null,
+                    "receiver": "S",
+                    "sender": "G",
+                    "uses": null,
+                    "verified": false
+                  },
+                  "contract": null,
+                  "fields": [],
+                  "label": "Ok"
+                },
+                {
+                  "consent": false,
+                  "cont": {
+                    "cont": {
+                      "node": "var",
+                      "var": "Loop"
+                    },
+                    "contract": null,
+                    "fields": [],
+                    "from_oracle": false,
+                    "irreversible": false,
+                    "label": "Again",
+                    "node": "comm",
+                    "on_crash": null,
+                    "receiver": "S",
+                    "sender": "G",
+                    "uses": null,
+                    "verified": false
+                  },
+                  "contract": {
+                    "relation": [
+                      "nonempty",
+                      "why",
+                      null
+                    ],
+                    "text": "len(why) > 0"
+                  },
+                  "fields": [
+                    {
+                      "name": "why",
+                      "sort": "Str",
+                      "source": null
+                    }
+                  ],
+                  "label": "Trim"
+                }
+              ],
+              "node": "choice",
+              "receiver": "U",
+              "sender": "G"
+            },
+            "contract": {
+              "relation": [
+                "le",
+                "size",
+                "budget"
+              ],
+              "text": "size <= budget"
+            },
+            "fields": [
+              {
+                "name": "size",
+                "sort": "Int",
+                "source": null
+              }
+            ],
+            "from_oracle": true,
+            "irreversible": false,
+            "label": "Summary",
+            "node": "comm",
+            "on_crash": null,
+            "receiver": "G",
+            "sender": "S",
+            "uses": "read",
+            "verified": false
+          },
+          "max_iters": null,
+          "measure": null,
+          "node": "rec",
+          "stream": false,
+          "var": "Loop"
+        },
+        "contract": null,
+        "fields": [
+          {
+            "name": "text",
+            "sort": "Str",
+            "source": null
+          },
+          {
+            "name": "budget",
+            "sort": "Int",
+            "source": null
+          }
+        ],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "Ask",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "S",
+        "sender": "U",
+        "uses": null,
+        "verified": false
+      },
+      "name": "Summarize",
+      "roles": [
+        "U",
+        "S",
+        "G"
+      ]
+    },
+    "casl": "// =============================================================================\n// summarize.casl — Tutorial: \"budgeted summarization with a check loop\"\n// =============================================================================\n// Three participants (roles):\n//   U = User        — poses the task\n//   S = Summarizer  — the LLM-backed agent (the ORACLE); summarizes\n//   G = Gate        — checks the result and decides\n//\n// Flow:\n//   1. U tasks S with a text and a `budget` (max. allowed size).\n//   2. S generates via LLM a summary of size `size`.\n//      The data Contract [size <= budget] MUST hold — otherwise blame on S.\n//   3. G decides:\n//        Ok        → fits; S receives Take(); the protocol ends.\n//        Trim(why) → too large; S receives Again() and repeats (loop).\n//\n// CASL proves the \"hull\" statically (projection, types, least-privilege,\n// promise linearity); only the LLM output is the nondeterministic\n// oracle monitored at RUNTIME (guiding principle: hull proven, LLM = oracle).\n//\n// Try it:\n//   ./casl check examples/summarize.casl\n//   ./casl run   examples/summarize.casl --budget 50            # Mock (deterministic)\n//   ./casl run   examples/summarize.casl --live --budget 200    # real Gemma oracle\n//\n// Note: do not name a payload field `len` — `len` is reserved in the Contract for the\n// form `len(x) > 0` (the size field is therefore called `size` here).\n// =============================================================================\nprotocol Summarize {\n  roles U, S, G;\n  agent S caps { read(doc) scope \"doc:readonly\" mode read ttl 2 sig \"s1\"; }\n\n  U -> S : Ask(text: Str, budget: Int);\n  rec Loop {\n    S -> G : Summary(size: Int) [size <= budget] uses read oracle;\n    choice at G -> U {\n      Ok: { G -> S : Take(); }\n      Trim(why: Str) [len(why) > 0]: { G -> S : Again(); continue Loop; }\n    }\n  }\n}\n"
+  },
+  {
+    "ast": {
+      "async_k": null,
+      "caps": {
+        "S": [
+          {
+            "mode": "read",
+            "params": [
+              "query"
+            ],
+            "scope": "web:readonly",
+            "sigma": "s0",
+            "tool": "search",
+            "ttl": 1
+          },
+          {
+            "mode": "write",
+            "params": [
+              "seg"
+            ],
+            "scope": "air:book",
+            "sigma": "s1",
+            "tool": "flight",
+            "ttl": 1
+          },
+          {
+            "mode": "write",
+            "params": [
+              "room"
+            ],
+            "scope": "hotel:book",
+            "sigma": "s2",
+            "tool": "hotel",
+            "ttl": 1
+          }
+        ]
+      },
+      "crash": [],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "cont": {
+            "approval": true,
+            "branches": [
+              {
+                "consent": true,
+                "cont": {
+                  "cont": {
+                    "cont": {
+                      "cont": {
+                        "cont": {
+                          "node": "end"
+                        },
+                        "contract": null,
+                        "fields": [],
+                        "from_oracle": false,
+                        "irreversible": false,
+                        "label": "Voucher",
+                        "node": "comm",
+                        "on_crash": null,
+                        "receiver": "U",
+                        "sender": "H",
+                        "uses": null,
+                        "verified": false
+                      },
+                      "contract": null,
+                      "fields": [],
+                      "from_oracle": false,
+                      "irreversible": false,
+                      "label": "Ticket",
+                      "node": "comm",
+                      "on_crash": null,
+                      "receiver": "U",
+                      "sender": "F",
+                      "uses": null,
+                      "verified": false
+                    },
+                    "contract": null,
+                    "fields": [],
+                    "from_oracle": false,
+                    "irreversible": true,
+                    "label": "BookHotel",
+                    "node": "comm",
+                    "on_crash": null,
+                    "receiver": "H",
+                    "sender": "S",
+                    "uses": "hotel",
+                    "verified": false
+                  },
+                  "contract": null,
+                  "fields": [],
+                  "from_oracle": false,
+                  "irreversible": true,
+                  "label": "BookFlight",
+                  "node": "comm",
+                  "on_crash": null,
+                  "receiver": "F",
+                  "sender": "S",
+                  "uses": "flight",
+                  "verified": false
+                },
+                "contract": null,
+                "fields": [],
+                "label": "Confirm"
+              },
+              {
+                "consent": false,
+                "cont": {
+                  "cont": {
+                    "cont": {
+                      "cont": {
+                        "cont": {
+                          "node": "end"
+                        },
+                        "contract": null,
+                        "fields": [],
+                        "from_oracle": false,
+                        "irreversible": false,
+                        "label": "Stood",
+                        "node": "comm",
+                        "on_crash": null,
+                        "receiver": "U",
+                        "sender": "H",
+                        "uses": null,
+                        "verified": false
+                      },
+                      "contract": null,
+                      "fields": [],
+                      "from_oracle": false,
+                      "irreversible": false,
+                      "label": "Released",
+                      "node": "comm",
+                      "on_crash": null,
+                      "receiver": "U",
+                      "sender": "F",
+                      "uses": null,
+                      "verified": false
+                    },
+                    "contract": null,
+                    "fields": [],
+                    "from_oracle": false,
+                    "irreversible": false,
+                    "label": "DropHotel",
+                    "node": "comm",
+                    "on_crash": null,
+                    "receiver": "H",
+                    "sender": "S",
+                    "uses": null,
+                    "verified": false
+                  },
+                  "contract": null,
+                  "fields": [],
+                  "from_oracle": false,
+                  "irreversible": false,
+                  "label": "DropFlight",
+                  "node": "comm",
+                  "on_crash": null,
+                  "receiver": "F",
+                  "sender": "S",
+                  "uses": null,
+                  "verified": false
+                },
+                "contract": null,
+                "fields": [],
+                "label": "Cancel"
+              }
+            ],
+            "node": "choice",
+            "receiver": "S",
+            "sender": "U"
+          },
+          "contract": {
+            "relation": [
+              "le",
+              "cost",
+              "budget"
+            ],
+            "text": "cost <= budget"
+          },
+          "fields": [
+            {
+              "name": "cost",
+              "sort": "Int",
+              "source": null
+            }
+          ],
+          "from_oracle": true,
+          "irreversible": false,
+          "label": "Plan",
+          "node": "comm",
+          "on_crash": null,
+          "receiver": "U",
+          "sender": "S",
+          "uses": "search",
+          "verified": false
+        },
+        "contract": null,
+        "fields": [
+          {
+            "name": "dest",
+            "sort": "Str",
+            "source": null
+          },
+          {
+            "name": "budget",
+            "sort": "Int",
+            "source": null
+          }
+        ],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "Trip",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "S",
+        "sender": "U",
+        "uses": null,
+        "verified": false
+      },
+      "name": "TravelBooking",
+      "roles": [
+        "U",
+        "S",
+        "F",
+        "H"
+      ]
+    },
+    "casl": "// =============================================================================\n// travel_booking.casl — travel booking: ONE approval gates TWO irreversible effects\n// =============================================================================\n// U = User, S = assistant (agent/ORACLE), F = flight connector, H = hotel connector.\n//\n// S researches (search, mode read) and proposes a trip with a total cost;\n// the data Contract [cost <= budget] MUST hold. In the consent branch of ONE\n// approval gate lie TWO irreversible bookings (flight + hotel). Mergeability:\n// F and H each receive in BOTH branches a distinguishing label, U gets\n// the confirmations — so the 4-role choreography is realizable.\n//\n//   ./casl check examples/travel_booking.casl\n//   ./casl run   examples/travel_booking.casl --approve\n// =============================================================================\nprotocol TravelBooking {\n  roles U, S, F, H;\n  agent S caps {\n    search(query) scope \"web:readonly\" mode read  ttl 1 sig \"s0\";\n    flight(seg)   scope \"air:book\"     mode write ttl 1 sig \"s1\";\n    hotel(room)   scope \"hotel:book\"   mode write ttl 1 sig \"s2\";\n  }\n\n  U -> S : Trip(dest: Str, budget: Int);\n  S -> U : Plan(cost: Int) [cost <= budget] uses search oracle;\n  choice approval at U -> S {\n    Confirm consent: {\n      S -> F : BookFlight() uses flight irreversible;\n      S -> H : BookHotel()  uses hotel  irreversible;\n      F -> U : Ticket();\n      H -> U : Voucher();\n    }\n    Cancel: {\n      S -> F : DropFlight();\n      S -> H : DropHotel();\n      F -> U : Released();\n      H -> U : Stood();\n    }\n  }\n}\n"
+  }
+]

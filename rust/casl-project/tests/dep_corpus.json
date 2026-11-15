@@ -1,0 +1,146 @@
+[
+  {
+    "model": {
+      "deps": [],
+      "floor": null,
+      "ledger_ok": true,
+      "min_evidence_slsa": true
+    },
+    "parse_ok": true,
+    "text": "# just a comment, no deps\n"
+  },
+  {
+    "model": {
+      "deps": [
+        {
+          "accepted_by": "Martin",
+          "date": "2026-06-24",
+          "evidence": "pin",
+          "name": "requests",
+          "sha256": "sha256:6f1ed002ab55",
+          "version": "2.32.3",
+          "well_formed": true
+        }
+      ],
+      "floor": "pin",
+      "ledger_ok": true,
+      "min_evidence_slsa": false
+    },
+    "parse_ok": true,
+    "text": "requests 2.32.3 sha256:6f1ed002ab55 accepted-by:Martin date:2026-06-24\n"
+  },
+  {
+    "model": {
+      "deps": [
+        {
+          "accepted_by": "Alice",
+          "date": null,
+          "evidence": "slsa",
+          "name": "lib",
+          "sha256": "sha256:aa11",
+          "version": "1.0",
+          "well_formed": true
+        }
+      ],
+      "floor": "slsa",
+      "ledger_ok": true,
+      "min_evidence_slsa": true
+    },
+    "parse_ok": true,
+    "text": "lib 1.0 sha256:aa11 accepted-by:Alice evidence:slsa\n"
+  },
+  {
+    "model": {
+      "deps": [
+        {
+          "accepted_by": "A",
+          "date": null,
+          "evidence": "signed",
+          "name": "a",
+          "sha256": "sha256:aa",
+          "version": "1",
+          "well_formed": true
+        },
+        {
+          "accepted_by": "B",
+          "date": null,
+          "evidence": "pin",
+          "name": "b",
+          "sha256": "sha256:bb",
+          "version": "2",
+          "well_formed": true
+        }
+      ],
+      "floor": "pin",
+      "ledger_ok": true,
+      "min_evidence_slsa": false
+    },
+    "parse_ok": true,
+    "text": "a 1 sha256:aa accepted-by:A evidence:signed\nb 2 sha256:bb accepted-by:B\n"
+  },
+  {
+    "model": {
+      "deps": [
+        {
+          "accepted_by": "A",
+          "date": null,
+          "evidence": "pin",
+          "name": "x",
+          "sha256": "",
+          "version": "1.0",
+          "well_formed": false
+        }
+      ],
+      "floor": "pin",
+      "ledger_ok": false,
+      "min_evidence_slsa": false
+    },
+    "parse_ok": true,
+    "text": "x 1.0 accepted-by:A\n"
+  },
+  {
+    "model": {
+      "deps": [
+        {
+          "accepted_by": "",
+          "date": null,
+          "evidence": "pin",
+          "name": "y",
+          "sha256": "sha256:bb",
+          "version": "2.0",
+          "well_formed": false
+        }
+      ],
+      "floor": "pin",
+      "ledger_ok": false,
+      "min_evidence_slsa": false
+    },
+    "parse_ok": true,
+    "text": "y 2.0 sha256:bb\n"
+  },
+  {
+    "model": {
+      "deps": [
+        {
+          "accepted_by": "A",
+          "date": null,
+          "evidence": "bogus",
+          "name": "z",
+          "sha256": "sha256:cc",
+          "version": "3.0",
+          "well_formed": false
+        }
+      ],
+      "floor": "bogus",
+      "ledger_ok": false,
+      "min_evidence_slsa": false
+    },
+    "parse_ok": true,
+    "text": "z 3.0 sha256:cc accepted-by:A evidence:bogus\n"
+  },
+  {
+    "model": null,
+    "parse_ok": false,
+    "text": "loneword\n"
+  }
+]

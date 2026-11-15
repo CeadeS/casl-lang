@@ -1,0 +1,34 @@
+// =============================================================================
+// casl_ide_pipeline.casl — the IDE describes ITSELF (Phase 5, P0/"lived system")
+// =============================================================================
+// The requirement-driven IDE is itself a pipeline of exactly the node kinds
+// it knows — and it passes its OWN gate:
+//
+//   U  user (Requirements = authority)           G  generator oracle (LLM box)
+//   V  verifier (deterministic checker)          R  reviewer oracle (LLM box, Tier 2)
+//   H  human (Tier 3)                            Store  project (irreversible adoption)
+//
+//   · G→V:Candidate  ⟨oracle⟩ [len(casl)>0]  — generator = opaque box, monitored at the boundary.
+//   · V→R:Verdict    ⟨verified⟩              — the checker is the verified program (hull).
+//   · R→H:Review     ⟨oracle⟩ [len(note)>0]  — reviewer = opaque box, monitored.
+//   · Store→U:Adopted ⟨irreversible⟩ behind the `approval` gate (H) — adoption only with attestation.
+//
+// `casl check` accepts this (pipeline-safe + approval-dominated). The IDE's monotone gate
+// requires human attestation for the verified node AND the irreversible adoption
+// (Tier 3) — so the IDE checks itself with its own means.
+//
+//   ./casl check examples/casl_ide_pipeline.casl     # ✓ accepted
+// =============================================================================
+protocol CaslIdePipeline {
+  roles U, G, V, R, H, Store;
+  agent Store caps { write(artifact) scope "project:artifacts" mode write ttl 1 sig "store1"; }
+
+  U -> G : Requirement(spec: Str);
+  G -> V : Candidate(casl: Str) [len(casl) > 0] oracle;
+  V -> R : Verdict(ok: Bool) verified;
+  R -> H : Review(note: Str) [len(note) > 0] oracle;
+  choice approval at H -> Store {
+    Attest consent: { Store -> U : Adopted() uses write irreversible; }
+    Reject:         { Store -> U : Rejected(); }
+  }
+}

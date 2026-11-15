@@ -1,0 +1,115 @@
+[
+  {
+    "bindings": {
+      "classify": [
+        "T",
+        "Classify",
+        "oracle"
+      ]
+    },
+    "choreos": [
+      "protocol T {\n  roles A, J;\n  A -> J : Classify(x: Int) oracle;\n}"
+    ],
+    "ok": true,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"classify\"\nkind = \"oracle\"\nrequirement = \"R\"\nimplements = \"T:Classify\"\n",
+    "viol_count": 0
+  },
+  {
+    "bindings": {
+      "notify": [
+        "N",
+        "Notify",
+        "effect"
+      ]
+    },
+    "choreos": [
+      "protocol N {\n  roles S, M;\n  S -> M : Notify() uses mail;\n}"
+    ],
+    "ok": true,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"notify\"\nkind = \"external\"\nrequirement = \"R\"\nimplements = \"N:Notify\"\n",
+    "viol_count": 0
+  },
+  {
+    "bindings": {
+      "conflict": [
+        "V",
+        "Draft",
+        "verified"
+      ]
+    },
+    "choreos": [
+      "protocol V {\n  roles A, J;\n  A -> J : Draft(x: Int) verified;\n}"
+    ],
+    "ok": true,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"conflict\"\nkind = \"verified\"\nrequirement = \"R\"\nbody = \"artifacts/conflict.py\"\nimplements = \"V:Draft\"\n",
+    "viol_count": 0
+  },
+  {
+    "bindings": {
+      "draft": [
+        "P",
+        "Msg",
+        "plain"
+      ]
+    },
+    "choreos": [
+      "protocol P {\n  roles A, J;\n  A -> J : Msg();\n}"
+    ],
+    "ok": true,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"draft\"\nkind = \"generated\"\nrequirement = \"R\"\nbody = \"artifacts/draft.py\"\nimplements = \"P:Msg\"\n",
+    "viol_count": 0
+  },
+  {
+    "bindings": {},
+    "choreos": [],
+    "ok": true,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"dep\"\nkind = \"external\"\nrequirement = \"R\"\n",
+    "viol_count": 0
+  },
+  {
+    "bindings": {
+      "classify": [
+        "T",
+        "Classify",
+        "oracle"
+      ],
+      "notify": [
+        "N",
+        "Notify",
+        "effect"
+      ]
+    },
+    "choreos": [
+      "protocol T {\n  roles A, J;\n  A -> J : Classify(x: Int) oracle;\n}",
+      "protocol N {\n  roles S, M;\n  S -> M : Notify() uses mail;\n}"
+    ],
+    "ok": true,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"classify\"\nkind = \"oracle\"\nrequirement = \"R\"\nimplements = \"T:Classify\"\n[[artifact]]\nname = \"notify\"\nkind = \"external\"\nrequirement = \"R\"\nimplements = \"N:Notify\"\n",
+    "viol_count": 0
+  },
+  {
+    "bindings": {},
+    "choreos": [
+      "protocol T {\n  roles A, J;\n  A -> J : Classify(x: Int) oracle;\n}"
+    ],
+    "ok": false,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"a\"\nkind = \"verified\"\nrequirement = \"R\"\nbody = \"artifacts/a.py\"\nimplements = \"T:Classify\"\n",
+    "viol_count": 1
+  },
+  {
+    "bindings": {},
+    "choreos": [],
+    "ok": false,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"a\"\nkind = \"oracle\"\nrequirement = \"R\"\nimplements = \"Nope:X\"\n",
+    "viol_count": 1
+  },
+  {
+    "bindings": {},
+    "choreos": [
+      "protocol T {\n  roles A, J;\n  A -> J : Classify(x: Int) oracle;\n}"
+    ],
+    "ok": false,
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"a\"\nkind = \"oracle\"\nrequirement = \"R\"\nimplements = \"T:Missing\"\n",
+    "viol_count": 1
+  }
+]

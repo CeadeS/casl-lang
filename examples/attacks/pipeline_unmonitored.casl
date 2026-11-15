@@ -1,0 +1,14 @@
+// =============================================================================
+// ATTACK: unmonitored LLM box (R2 violation, LH-F-011)
+// =============================================================================
+// A produces its response from an LLM (`oracle`), but WITHOUT a Contract — the
+// monitored boundary is missing. An opaque, unchecked output must not pass.
+// `casl check` MUST reject this (pipeline_safe R2).
+// =============================================================================
+protocol PipelineUnmonitored {
+  roles C, A;
+  agent A caps { llm(q) scope "gen" mode read ttl 1 sig "s"; }
+
+  C -> A : Ask(q: Str);
+  A -> C : Result(answer: Str) uses llm oracle;
+}

@@ -1,0 +1,75 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install z3-solver pytest
+      - name: compile
+        run: python -m py_compile src/casl/*.py src/casl/kernel/*.py
+      - name: integrity gate — no F* proof holes (admits=0)
+        run: bash scripts/check_admits.sh
+      - name: living audit (authority chain + CEP gate)
+        run: PYTHONPATH=src python -m casl.audit
+      - name: pytest
+        run: pytest -q
+      - name: package install + import
+        run: pip install . && python -c "import casl; print(casl.__version__)"
+
+  fstar:
+    # Machine-verifies the formal core: F* must actually accept CASL.fst at 0 admits
+    # (the python job's check_admits.sh only checks for proof-hole TEXT, not that F* type-checks).
+    runs-on: ubuntu-latest
+    env:
+      FSTAR_VERSION: v2026.03.24
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned F* release (Z3 ships with it) — layout-agnostic
+        run: |
+          set -euo pipefail
+          url=$(curl -sSL -H "Authorization: Bearer ${{ github.token }}" \
+                  "https://api.github.com/repos/FStarLang/FStar/releases/tags/${FSTAR_VERSION}" \
+                | grep -oE '"browser_download_url": *"[^"]*([Ll]inux|ubuntu)[^"]*x86_64[^"]*\.tar\.gz"' \
+                | grep -oE 'https://[^"]+' | head -1)
+          test -n "$url" || { echo "no Linux x86_64 .tar.gz asset for ${FSTAR_VERSION}"; exit 1; }
+          echo "Downloading $url"
+          curl -sSL "$url" -o fstar.tar.gz
+          mkdir -p "$HOME/fstarpkg"
+          tar xzf fstar.tar.gz -C "$HOME/fstarpkg"
+          exe=$(find "$HOME/fstarpkg" -type f -name 'fstar.exe' | head -1)
+          test -n "$exe" || { echo "fstar.exe not found in tarball; tree:"; find "$HOME/fstarpkg" -maxdepth 2 | head -50; exit 1; }
+          echo "$(dirname "$exe")" >> "$GITHUB_PATH"
+      - name: F* version
+        run: fstar.exe --version
+      - name: F* verify — CASL.fst (type-check + SMT, 0 admits)
+        run: make -C fstar verify
+
+  # NOTE: the TCB differential bridge (`make -C fstar tcb-bridge`, extracted F* core vs the Python
+  # checker over 412 protocols) is NOT a CI job: the F* BINARY release does not ship the OCaml
+  # extraction runtime as a findlib package (`fstar.lib`), so dune cannot link the extracted driver
+  # without an opam SOURCE build of F* (20-40 min, too heavy/fragile for a required check). The bridge
+  # is run locally (it is green, 412/412) and is re-validated whenever the core changes. The `fstar`
+  # job above already machine-enforces the proofs (F* type-checks + SMT-verifies CASL.fst).
+
+  # (Rust CI lives in rust.yml: cargo fmt/clippy/test over the rust/ workspace + the cross-impl
+  # conformance differential. The former standalone engine/ crate was promoted into rust/ as casl-core,
+  # so the old `cargo test` in engine/ is removed here — rust.yml covers the workspace.)
+
+  branch-guard:
+    # EMULATED branch protection (private repo: GitHub rulesets need public/Team — docs/branch-guard.md).
+    # Advisory SIGNAL: if a PR changes a CODEOWNERS/TCB path, the tip commit must carry the owner's
+    # signature. On a Free private repo this cannot BLOCK the merge; the local pre-push hook
+    # (hooks/pre-push) is the real enforcement. Runs lenient (signature-present) since the runner lacks
+    # the owner's public key to verify identity.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: emulated Code-Owner sign-off on TCB paths
+        run: PYTHONPATH=src python scripts/branch_guard.py --range "origin/${{ github.base_ref }}..HEAD"

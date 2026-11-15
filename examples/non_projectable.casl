@@ -1,0 +1,15 @@
+// INTENTIONALLY FAULTY — demonstration of the well-formedness diagnostics.
+// J decides the choice toward C. In the Accept branch A learns nothing, in the
+// Reject branch A receives `Retry`. A cannot distinguish the branches locally
+// (non-local choice) → not projectable (MUST).
+// `casl check` MUST reject with exit 1.
+protocol NonProjectable {
+  roles C, A, J;
+
+  C -> A : Request(question: Str, budget: Int);
+  A -> J : Draft(answer: Str, cost: Int);
+  choice at J -> C {
+    Accept: { }
+    Reject(reason: Str): { J -> A : Retry(); }
+  }
+}

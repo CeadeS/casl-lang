@@ -1,0 +1,56 @@
+{
+  "async_fanin_bad": [
+    "async:bounded"
+  ],
+  "async_fanout": [
+    "async:bounded"
+  ],
+  "async_request": [
+    "async:bounded"
+  ],
+  "budgeted_qa": [
+    "oracle:attested"
+  ],
+  "budgeted_qa_term": [
+    "oracle:attested"
+  ],
+  "calendar_guard": [
+    "oracle:attested"
+  ],
+  "cap_violation": [
+    "oracle:attested"
+  ],
+  "casl_ide_pipeline": [
+    "oracle:attested",
+    "verified:attested"
+  ],
+  "email_secretary_reply": [
+    "oracle:attested"
+  ],
+  "expense_approval": [
+    "oracle:attested"
+  ],
+  "meeting_scheduler": [
+    "oracle:attested"
+  ],
+  "pipeline_mixed": [
+    "oracle:attested",
+    "verified:attested"
+  ],
+  "pipeline_oracle_verified": [
+    "oracle:attested",
+    "verified:attested"
+  ],
+  "pipeline_unmonitored": [
+    "oracle:attested"
+  ],
+  "summarize": [
+    "oracle:attested"
+  ],
+  "travel_booking": [
+    "oracle:attested"
+  ],
+  "triage": [
+    "oracle:attested"
+  ]
+}

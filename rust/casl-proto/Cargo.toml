@@ -1,0 +1,10 @@
+[package]
+name = "casl-proto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "CASL broker wire protocol (JSON-RPC 2.0) — the single source of truth for the broker<->binding contract."
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true

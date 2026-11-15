@@ -1,0 +1,41 @@
+// =============================================================================
+// summarize.casl — Tutorial: "budgeted summarization with a check loop"
+// =============================================================================
+// Three participants (roles):
+//   U = User        — poses the task
+//   S = Summarizer  — the LLM-backed agent (the ORACLE); summarizes
+//   G = Gate        — checks the result and decides
+//
+// Flow:
+//   1. U tasks S with a text and a `budget` (max. allowed size).
+//   2. S generates via LLM a summary of size `size`.
+//      The data Contract [size <= budget] MUST hold — otherwise blame on S.
+//   3. G decides:
+//        Ok        → fits; S receives Take(); the protocol ends.
+//        Trim(why) → too large; S receives Again() and repeats (loop).
+//
+// CASL proves the "hull" statically (projection, types, least-privilege,
+// promise linearity); only the LLM output is the nondeterministic
+// oracle monitored at RUNTIME (guiding principle: hull proven, LLM = oracle).
+//
+// Try it:
+//   ./casl check examples/summarize.casl
+//   ./casl run   examples/summarize.casl --budget 50            # Mock (deterministic)
+//   ./casl run   examples/summarize.casl --live --budget 200    # real Gemma oracle
+//
+// Note: do not name a payload field `len` — `len` is reserved in the Contract for the
+// form `len(x) > 0` (the size field is therefore called `size` here).
+// =============================================================================
+protocol Summarize {
+  roles U, S, G;
+  agent S caps { read(doc) scope "doc:readonly" mode read ttl 2 sig "s1"; }
+
+  U -> S : Ask(text: Str, budget: Int);
+  rec Loop {
+    S -> G : Summary(size: Int) [size <= budget] uses read oracle;
+    choice at G -> U {
+      Ok: { G -> S : Take(); }
+      Trim(why: Str) [len(why) > 0]: { G -> S : Again(); continue Loop; }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+[package]
+name = "casl-cli"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+# The single use-ready binary: `casl`. Ties the at-parity crates together (surface/check/project/conductor).
+# The checker verbs use only the workspace crates. The host verbs (prepare/act/resolve/journal) run the
+# broker in-process, which brings its dependencies (signatures, SQLite journal, HTTPS) and serde_json.
+[[bin]]
+name = "casl"
+path = "src/main.rs"
+
+[dependencies]
+casl-surface = { path = "../casl-surface" }
+casl-core = { path = "../casl-core" }
+casl-check = { path = "../casl-check" }
+casl-project = { path = "../casl-project" }
+casl-conductor = { path = "../casl-conductor" }
+casl-broker = { path = "../casl-broker" }
+casl-proto = { path = "../casl-proto" }
+serde_json.workspace = true

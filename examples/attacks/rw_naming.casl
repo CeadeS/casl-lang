@@ -1,0 +1,10 @@
+// ATTACK R-H1 (a) — LEAK (Red-Team v0.1.28): write capability with the common
+// "read-write" naming convention. The old substring test read `cal:read-write` as read-only
+// and let the effect through without approval. `casl check` MUST reject: effect follows from `mode`
+// (here missing → default `write` → effect-bearing), not from the free-text `scope`.
+protocol RWNaming {
+  roles S, U, K;
+  agent S caps { calendar(event) scope "cal:read-write" ttl 1 sig "s1"; }
+  S -> U : Notice(detail: Str);
+  S -> K : Move() uses calendar;
+}

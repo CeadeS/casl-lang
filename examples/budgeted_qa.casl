@@ -1,0 +1,15 @@
+// Canonical CASL example — parses exactly to casl_core.G_OK
+protocol BudgetedQA {
+  roles C, A, J;
+  agent A caps { search(query) scope "web:readonly" mode read ttl 3 sig "sig-A1"; }
+  crash A;
+
+  C -> A : Request(question: Str, budget: Int);
+  rec Loop {
+    A -> J : Draft(answer: Str, cost: Int) [cost <= budget] uses search oracle;
+    choice at J -> C {
+      Accept: { J -> A : Done(); }
+      Reject(reason: Str) [len(reason) > 0]: { J -> A : Retry(); continue Loop; }
+    }
+  }
+}

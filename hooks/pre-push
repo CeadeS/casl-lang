@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Emulated branch protection (private repo — GitHub rulesets need a public or paid repo).
+# Triggers only on pushes to `main`: requires the status-check gate green AND, if the pushed range
+# changes a CODEOWNERS/TCB path, an owner-SIGNED tip commit. See docs/branch-guard.md.
+# Enable with: bash scripts/install-hooks.sh   ·   bypass (logged): git push --no-verify
+set -u
+PROTECTED="refs/heads/main"
+ZERO="0000000000000000000000000000000000000000"
+root="$(git rev-parse --show-toplevel)"
+status=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$remote_ref" = "$PROTECTED" ] || continue
+  [ "$local_sha" = "$ZERO" ] && continue                       # branch deletion — skip
+  if [ "$remote_sha" = "$ZERO" ]; then                          # new branch: guard from the root
+    base="$(git rev-list --max-parents=0 "$local_sha" | tail -1)"
+  else
+    base="$remote_sha"
+  fi
+  echo "[branch-guard] emulating protection for $remote_ref  ($base..$local_sha)"
+  PYTHONPATH="$root/src" python3 "$root/scripts/branch_guard.py" \
+      --range "$base..$local_sha" --strict --gate || status=1
+done
+
+exit $status

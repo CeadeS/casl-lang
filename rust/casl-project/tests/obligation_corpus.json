@@ -1,0 +1,51 @@
+[
+  {
+    "effective_grade": "G0",
+    "grade_by_requirement": {},
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n"
+  },
+  {
+    "effective_grade": "G0",
+    "grade_by_requirement": {
+      "R": "G0"
+    },
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"s\"\nkind = \"verified\"\nrequirement = \"R\"\ngrade = \"G0\"\nbody = \"artifacts/s.py\"\n"
+  },
+  {
+    "effective_grade": "G3",
+    "grade_by_requirement": {
+      "R": "G3"
+    },
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"o\"\nkind = \"oracle\"\nrequirement = \"R\"\ngrade = \"G3\"\n"
+  },
+  {
+    "effective_grade": "G3",
+    "grade_by_requirement": {
+      "R1": "G0",
+      "R2": "G3"
+    },
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"s\"\nkind = \"verified\"\nrequirement = \"R1\"\ngrade = \"G0\"\nbody = \"artifacts/s.py\"\n[[artifact]]\nname = \"o\"\nkind = \"oracle\"\nrequirement = \"R2\"\ngrade = \"G3\"\n"
+  },
+  {
+    "effective_grade": "G3",
+    "grade_by_requirement": {
+      "R": "G3"
+    },
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"s\"\nkind = \"verified\"\nrequirement = \"R\"\ngrade = \"G0\"\nbody = \"artifacts/s.py\"\n[[artifact]]\nname = \"g\"\nkind = \"generated\"\nrequirement = \"R\"\ngrade = \"G2\"\nbody = \"artifacts/g.py\"\n"
+  },
+  {
+    "effective_grade": "G3",
+    "grade_by_requirement": {
+      "R": "G3"
+    },
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"g\"\nkind = \"generated\"\nrequirement = \"R\"\ngrade = \"G1\"\nbody = \"artifacts/g.py\"\n"
+  },
+  {
+    "effective_grade": "G2",
+    "grade_by_requirement": {
+      "R1": "G0",
+      "R2": "G2"
+    },
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"v1\"\nkind = \"verified\"\nrequirement = \"R1\"\ngrade = \"G0\"\nbody = \"artifacts/v1.py\"\n[[artifact]]\nname = \"v2\"\nkind = \"verified\"\nrequirement = \"R2\"\ngrade = \"G2\"\nbody = \"artifacts/v2.py\"\n"
+  }
+]

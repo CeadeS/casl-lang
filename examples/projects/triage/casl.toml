@@ -1,0 +1,26 @@
+name = "triage"
+version = "0.1.0"
+
+# The CONDUCTOR dogfood (docs/conductor.md): two artifacts bound to choreography
+# SITES via the typed seam (`implements`), each a different provenance class.
+# `kind` is structured + validated (LH-F-013), never name-inferred.
+
+# ORACLE site: a live LLM classification behind the broker. kind=oracle needs no
+# body (the call IS the artifact); floors at G3; the call is a MONITORED oracle.
+[[artifact]]
+name        = "classify"
+kind        = "oracle"
+requirement = "TRIAGE-001"
+grade       = "G3"
+implements  = "Triage:Classify"
+
+# EFFECT site: an external mail sender we cannot verify — pinned + contained at
+# runtime by the capability broker (deny-by-default). External ⇒ burden, floors at G3.
+[[artifact]]
+name        = "notify"
+kind        = "external"
+requirement = "TRIAGE-002"
+grade       = "G3"
+implements  = "Triage:Notify"
+provides    = "mail"            # the single-purpose mail provider (CEP-0078): the conductor routes the
+                               #   Notify effect through it at run time (effects go through a signed provider)

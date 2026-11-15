@@ -1,0 +1,39 @@
+// =============================================================================
+// travel_booking.casl — travel booking: ONE approval gates TWO irreversible effects
+// =============================================================================
+// U = User, S = assistant (agent/ORACLE), F = flight connector, H = hotel connector.
+//
+// S researches (search, mode read) and proposes a trip with a total cost;
+// the data Contract [cost <= budget] MUST hold. In the consent branch of ONE
+// approval gate lie TWO irreversible bookings (flight + hotel). Mergeability:
+// F and H each receive in BOTH branches a distinguishing label, U gets
+// the confirmations — so the 4-role choreography is realizable.
+//
+//   ./casl check examples/travel_booking.casl
+//   ./casl run   examples/travel_booking.casl --approve
+// =============================================================================
+protocol TravelBooking {
+  roles U, S, F, H;
+  agent S caps {
+    search(query) scope "web:readonly" mode read  ttl 1 sig "s0";
+    flight(seg)   scope "air:book"     mode write ttl 1 sig "s1";
+    hotel(room)   scope "hotel:book"   mode write ttl 1 sig "s2";
+  }
+
+  U -> S : Trip(dest: Str, budget: Int);
+  S -> U : Plan(cost: Int) [cost <= budget] uses search oracle;
+  choice approval at U -> S {
+    Confirm consent: {
+      S -> F : BookFlight() uses flight irreversible;
+      S -> H : BookHotel()  uses hotel  irreversible;
+      F -> U : Ticket();
+      H -> U : Voucher();
+    }
+    Cancel: {
+      S -> F : DropFlight();
+      S -> H : DropHotel();
+      F -> U : Released();
+      H -> U : Stood();
+    }
+  }
+}

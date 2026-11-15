@@ -1,0 +1,91 @@
+[
+  {
+    "boundaries": [
+      "W:First"
+    ],
+    "choreos": [
+      "protocol W {\n  roles A, J, C;\n  A -> J : First(x: Int) verified;\n  J -> C : Weak() oracle;\n}"
+    ],
+    "flow_grades": [
+      [
+        "W",
+        "First",
+        "G0"
+      ],
+      [
+        "W",
+        "Weak",
+        "G3"
+      ]
+    ],
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"s\"\nkind = \"verified\"\nrequirement = \"R\"\ngrade = \"G0\"\nbody = \"artifacts/s.py\"\nimplements = \"W:First\"\n[[artifact]]\nname = \"w\"\nkind = \"oracle\"\nrequirement = \"R\"\ngrade = \"G3\"\nimplements = \"W:Weak\"\n"
+  },
+  {
+    "boundaries": [
+      "M:Draft"
+    ],
+    "choreos": [
+      "protocol M {\n  roles A, J;\n  A -> J : Draft(x: Int) [x <= 100] oracle;\n}"
+    ],
+    "flow_grades": [
+      [
+        "M",
+        "Draft",
+        "G3"
+      ]
+    ],
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"d\"\nkind = \"oracle\"\nrequirement = \"R\"\ngrade = \"G3\"\nimplements = \"M:Draft\"\n"
+  },
+  {
+    "boundaries": [
+      "G:J->C",
+      "G:Pre"
+    ],
+    "choreos": [
+      "protocol G {\n  roles A, J, C;\n  A -> J : Pre(x: Int) verified;\n  choice approval at J -> C {\n    Go consent: { J -> A : Ok(); }\n    Stop: { J -> A : No(); }\n  }\n}"
+    ],
+    "flow_grades": [
+      [
+        "G",
+        "Pre",
+        "G0"
+      ]
+    ],
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"s\"\nkind = \"verified\"\nrequirement = \"R\"\ngrade = \"G0\"\nbody = \"artifacts/s.py\"\nimplements = \"G:Pre\"\n"
+  },
+  {
+    "boundaries": [
+      "X:First",
+      "X:Last"
+    ],
+    "choreos": [
+      "protocol X {\n  roles A, J, C;\n  A -> J : First(x: Int) verified;\n  J -> C : Mid() oracle;\n  C -> A : Last(y: Int) verified;\n}"
+    ],
+    "flow_grades": [
+      [
+        "X",
+        "First",
+        "G0"
+      ],
+      [
+        "X",
+        "Last",
+        "G3"
+      ],
+      [
+        "X",
+        "Mid",
+        "G3"
+      ]
+    ],
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"s1\"\nkind = \"verified\"\nrequirement = \"R\"\ngrade = \"G0\"\nbody = \"artifacts/s1.py\"\nimplements = \"X:First\"\n[[artifact]]\nname = \"w\"\nkind = \"oracle\"\nrequirement = \"R\"\ngrade = \"G3\"\nimplements = \"X:Mid\"\n[[artifact]]\nname = \"s2\"\nkind = \"verified\"\nrequirement = \"R\"\ngrade = \"G0\"\nbody = \"artifacts/s2.py\"\nimplements = \"X:Last\"\n"
+  },
+  {
+    "boundaries": [],
+    "choreos": [
+      "protocol P {\n  roles A, J;\n  A -> J : Msg();\n}"
+    ],
+    "flow_grades": [],
+    "toml": "name = \"p\"\nversion = \"0.1.0\"\n[[artifact]]\nname = \"dep\"\nkind = \"external\"\nrequirement = \"R\"\ngrade = \"G3\"\n"
+  }
+]

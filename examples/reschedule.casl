@@ -1,0 +1,14 @@
+// Appointment rescheduling with an approval gate (LH-Q-011).
+// The irreversible calendar action `Move` sits behind the `approval` gate (U decides),
+// only in the Approve branch. K (calendar) learns a distinguishing label in BOTH branches
+// (Move/Skip) → projectable. `casl check` → accepted.
+protocol Reschedule {
+  roles S, U, K;
+  agent S caps { calendar(event) scope "cal:write" ttl 1 sig "s1"; }
+
+  S -> U : Conflict(detail: Str);
+  choice approval at U -> S {
+    Approve consent: { S -> K : Move() uses calendar irreversible; }
+    Deny:            { S -> K : Skip(); }
+  }
+}

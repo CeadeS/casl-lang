@@ -1,0 +1,172 @@
+[
+  {
+    "accepted_label": "Accept",
+    "approve": null,
+    "budget": 100,
+    "casl": "protocol Q {\n  roles A, J, C;\n  rec Loop {\n    A -> J : Draft(cost: Int) [cost <= budget] oracle;\n    choice at J -> C {\n      Accept: { J -> A : Done(); }\n      Reject: { J -> A : Retry(); continue Loop; }\n    }\n  }\n}",
+    "forwards": [],
+    "last_verdict": "ok",
+    "loops": 0,
+    "max_loops": 5,
+    "outcome": "completed",
+    "scenario": "ok"
+  },
+  {
+    "accepted_label": null,
+    "approve": null,
+    "budget": 100,
+    "casl": "protocol Q {\n  roles A, J, C;\n  rec Loop {\n    A -> J : Draft(cost: Int) [cost <= budget] oracle;\n    choice at J -> C {\n      Accept: { J -> A : Done(); }\n      Reject: { J -> A : Retry(); continue Loop; }\n    }\n  }\n}",
+    "forwards": [],
+    "last_verdict": "violation",
+    "loops": 6,
+    "max_loops": 5,
+    "outcome": "loop_bound_reached",
+    "scenario": "overspend"
+  },
+  {
+    "accepted_label": null,
+    "approve": null,
+    "budget": 100,
+    "casl": "protocol Q {\n  roles A, J, C;\n  rec Loop {\n    A -> J : Draft(cost: Int) [cost <= budget] oracle;\n    choice at J -> C {\n      Accept: { J -> A : Done(); }\n      Reject: { J -> A : Retry(); continue Loop; }\n    }\n  }\n}",
+    "forwards": [],
+    "last_verdict": "refusal",
+    "loops": 6,
+    "max_loops": 5,
+    "outcome": "loop_bound_reached",
+    "scenario": "refusal"
+  },
+  {
+    "accepted_label": "Accept",
+    "approve": null,
+    "budget": 100,
+    "casl": "protocol Q {\n  roles A, J, C;\n  rec Loop {\n    A -> J : Draft(cost: Int) [cost <= budget] oracle;\n    choice at J -> C {\n      Accept: { J -> A : Done(); }\n      Reject: { J -> A : Retry(); continue Loop; }\n    }\n  }\n}",
+    "forwards": [],
+    "last_verdict": "ok",
+    "loops": 1,
+    "max_loops": 5,
+    "outcome": "completed",
+    "scenario": "retry_then_ok"
+  },
+  {
+    "accepted_label": null,
+    "approve": null,
+    "budget": 100,
+    "casl": "protocol Q {\n  roles A, J, C;\n  rec Loop {\n    A -> J : Draft(cost: Int) [cost <= budget] oracle;\n    choice at J -> C {\n      Accept: { J -> A : Done(); }\n      Reject: { J -> A : Retry(); continue Loop; }\n    }\n  }\n}",
+    "forwards": [],
+    "last_verdict": "violation",
+    "loops": 6,
+    "max_loops": 5,
+    "outcome": "loop_bound_reached",
+    "scenario": "underreport"
+  },
+  {
+    "accepted_label": "Approve",
+    "approve": true,
+    "budget": 100,
+    "casl": "protocol Ap1 {\n  roles U, S, M;\n  agent S caps { mail(to) scope \"smtp\" mode write ttl 1 sig \"s\"; }\n  S -> U : Notice();\n  choice approval at U -> S {\n    Approve consent: { S -> M : Send() uses mail; }\n  }\n}",
+    "forwards": [],
+    "last_verdict": null,
+    "loops": 0,
+    "max_loops": 5,
+    "outcome": "completed",
+    "scenario": "ok"
+  },
+  {
+    "accepted_label": null,
+    "approve": false,
+    "budget": 100,
+    "casl": "protocol Ap1 {\n  roles U, S, M;\n  agent S caps { mail(to) scope \"smtp\" mode write ttl 1 sig \"s\"; }\n  S -> U : Notice();\n  choice approval at U -> S {\n    Approve consent: { S -> M : Send() uses mail; }\n  }\n}",
+    "forwards": [],
+    "last_verdict": null,
+    "loops": 0,
+    "max_loops": 5,
+    "outcome": "approval_denied",
+    "scenario": "ok"
+  },
+  {
+    "accepted_label": "Approve",
+    "approve": true,
+    "budget": 100,
+    "casl": "protocol ApD {\n  roles U, S, M;\n  agent S caps { mail(to) scope \"smtp\" mode write ttl 1 sig \"s\"; }\n  S -> U : Notice();\n  choice approval at U -> S {\n    Approve consent: { S -> M : Send() uses mail; }\n    Deny: { S -> M : Drop(); }\n  }\n}",
+    "forwards": [],
+    "last_verdict": null,
+    "loops": 0,
+    "max_loops": 5,
+    "outcome": "completed",
+    "scenario": "ok"
+  },
+  {
+    "accepted_label": "Deny",
+    "approve": false,
+    "budget": 100,
+    "casl": "protocol ApD {\n  roles U, S, M;\n  agent S caps { mail(to) scope \"smtp\" mode write ttl 1 sig \"s\"; }\n  S -> U : Notice();\n  choice approval at U -> S {\n    Approve consent: { S -> M : Send() uses mail; }\n    Deny: { S -> M : Drop(); }\n  }\n}",
+    "forwards": [],
+    "last_verdict": null,
+    "loops": 0,
+    "max_loops": 5,
+    "outcome": "completed",
+    "scenario": "ok"
+  },
+  {
+    "accepted_label": null,
+    "approve": null,
+    "budget": 100,
+    "casl": "protocol Td {\n  roles A, J;\n  A -> J : Act() uses search;\n}",
+    "forwards": [],
+    "last_verdict": null,
+    "loops": 0,
+    "max_loops": 5,
+    "outcome": "tool_denied",
+    "scenario": "ok"
+  },
+  {
+    "accepted_label": null,
+    "approve": null,
+    "budget": 100,
+    "casl": "protocol Tok {\n  roles A, J;\n  agent A caps { search(q) scope \"web\" mode read ttl 1 sig \"s\"; }\n  A -> J : Act() uses search;\n}",
+    "forwards": [],
+    "last_verdict": null,
+    "loops": 0,
+    "max_loops": 5,
+    "outcome": "completed",
+    "scenario": "ok"
+  },
+  {
+    "accepted_label": null,
+    "approve": null,
+    "budget": 100,
+    "casl": "protocol Fwd {\n  roles A, J, C;\n  A -> J : First(x: Int);\n  J -> C : Second(y = First.x);\n}",
+    "forwards": [
+      "Second.y = First.x"
+    ],
+    "last_verdict": null,
+    "loops": 0,
+    "max_loops": 5,
+    "outcome": "completed",
+    "scenario": "ok"
+  },
+  {
+    "accepted_label": null,
+    "approve": null,
+    "budget": 100,
+    "casl": "protocol FwdBad {\n  roles A, J, C;\n  J -> C : Second(y = First.x);\n  A -> J : First(x: Int);\n}",
+    "forwards": [],
+    "last_verdict": null,
+    "loops": 0,
+    "max_loops": 5,
+    "outcome": "forward_violation",
+    "scenario": "ok"
+  },
+  {
+    "accepted_label": null,
+    "approve": null,
+    "budget": 100,
+    "casl": "protocol Lin {\n  roles A, J;\n  A -> J : M();\n  J -> A : N();\n}",
+    "forwards": [],
+    "last_verdict": null,
+    "loops": 0,
+    "max_loops": 5,
+    "outcome": "completed",
+    "scenario": "ok"
+  }
+]

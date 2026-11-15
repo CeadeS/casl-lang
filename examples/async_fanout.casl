@@ -1,0 +1,23 @@
+// =============================================================================
+// async_fanout.casl — true concurrency via buffers (LH-F-010), SAFE
+// =============================================================================
+// C distributes two tasks to independent workers A and B; the responses go to
+// DISJOINT receivers (C and E, respectively). Because each inbox has only ONE
+// sender, there is no ordering contention — no matter what order the responses
+// arrive in, no inbox head is ever wrongly expected.
+//
+// Truly async: up to 2 messages in flight at a time ⇒ NOT sync-equivalent,
+// but the deny-by-default gate certifies bounded + orphan-free + deadlock-free
+// ⇒ class `async-bounded-safe`.
+//
+//   ./casl check examples/async_fanout.casl      # ✓ async-bounded-safe
+// =============================================================================
+protocol AsyncFanout {
+  roles C, A, B, E;
+  async k 1;
+
+  C -> A : task();
+  C -> B : task();
+  A -> C : done();
+  B -> E : done();
+}

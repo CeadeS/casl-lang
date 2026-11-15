@@ -1,0 +1,12 @@
+[package]
+name = "casl-host"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+description = "CASL rung-3 confinement host: launch a confined artifact whose only egress is the broker."
+
+# Pure-Rust, dependency-light by design (the host is in the TCB — keep it small + auditable). The
+# security-critical POLICY (allow/deny syscall lists, the egress plan) is dependency-free data, tested on
+# every OS. The Linux syscall enforcement is added behind target-gated deps when the rung-3 work lands:
+# [target.'cfg(target_os = "linux")'.dependencies] nix = ... ; seccompiler = ... ; landlock = ...
+[dependencies]

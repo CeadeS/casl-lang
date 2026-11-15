@@ -1,0 +1,9 @@
+{
+  "artifact": "classify_importance",
+  "sha256": "sha256:aafddadf819ea777b1fbe56a9f5cfd5da03fb1cbcaab368aaa1ee0dcf5551872",
+  "requirement": "LH-LOCAL-004",
+  "producer": "llm",
+  "signer": "Martin",
+  "sig_kind": "git",
+  "ts": "2026-06-24T09:00:00Z"
+}

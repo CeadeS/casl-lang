@@ -1,0 +1,26 @@
+// =============================================================================
+// create_task.casl — the AI-OS pilot template: ONE approved action, performed by the broker.
+// See docs/os-pilot.md
+// =============================================================================
+// U = user, O = the OS agent (untrusted proposer), T = the target task system.
+//
+// O proposes a task. U decides at an approval gate. Only the `consent` branch reaches the
+// irreversible effect `Create` (capability `tasks`, mode write) — approval dominance (LH-Q-011).
+// At run time the broker performs `Create` only for an approval SIGNED by U that names this
+// program version and the exact request (`casl act`).
+//
+//   casl check   examples/os_pilot/create_task.casl
+//   casl prepare --program examples/os_pilot/create_task.casl --site Create --request request.json
+// =============================================================================
+protocol CreateTask {
+  roles U, O, T;
+  agent O caps {
+    tasks(request) scope "tasks:create" mode write ttl 1 sig "os-pilot-1";
+  }
+
+  O -> U : Proposal(title: Str);
+  choice approval at U -> O {
+    Approve consent: { O -> T : Create() uses tasks irreversible; }
+    Decline:         { O -> T : Skip(); }
+  }
+}
