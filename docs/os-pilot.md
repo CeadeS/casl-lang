@@ -15,8 +15,9 @@ human *approves exactly that action*, and only the broker can *perform* it.
 ## Flow
 
 ```sh
-# 1. what must be signed for this action (program hash, capability, site, request digest)
-casl prepare --program create_task.casl --site Create --request request.json
+# 1. what must be signed for this action (program hash, capability, site, request digest, target account)
+casl prepare --program create_task.casl --site Create --request request.json \
+             --auth-env TASKS_TOKEN --account-from-token
 
 # 2. the user's approval UI adds {"nonce": <unique>, "exp": <unix seconds>} to "sign", serializes it,
 #    and signs  b"casl-approval-v1\n" + payload  with the user's Ed25519 key:
@@ -25,7 +26,7 @@ casl prepare --program create_task.casl --site Create --request request.json
 # 3. perform it
 casl act --program create_task.casl --site Create --request request.json \
          --approval approval.json --approvers approvers --journal journal.sqlite \
-         --allow-hosts graph.microsoft.com --auth-env TASKS_TOKEN
+         --allow-hosts graph.microsoft.com --auth-env TASKS_TOKEN --account-from-token
 ```
 
 `request.json` is `{method, url, headers, body}` — the target system is whatever that request addresses
@@ -33,14 +34,28 @@ casl act --program create_task.casl --site Create --request request.json \
 keys, one `<pubkey-hex>=<human|personal>` per line. `--auth-env VAR` makes the broker add
 `Authorization: Bearer $VAR` on the wire; the request itself must not carry that header.
 
+**Target account.** A request to an implicit-account endpoint (`/me/...`) does not say whose account it
+acts on — the credential does. So a credential always comes with its *identity*, and the approval names it
+(`sign.account`; show it to the user):
+
+- `--account-from-token` — the broker reads issuer, tenant and subject from the JWT it holds:
+  `jwt:iss=…;tid=…;sub=…` (`sub` = the `oid` claim when present). A refreshed token of the same principal
+  keeps the identity; a token of another principal does not.
+- `--account ID` — a credential reference you configure, for opaque tokens.
+
+Pass the same option to `prepare` and `act`. `act` compares the identity in the approval with the identity
+of the credential it is about to use, at consent and again at execution; a mismatch is
+`account_mismatch`. The identity is written to the journal; the token never is.
+
 `act` prints one JSON object (`status`, `consent`, `effect`) and exits `0` performed · `1` denied ·
 `3` ran but not performed (`rejected`, `not_sent`, `unknown`) · `2` usage/IO.
 
 ## What is enforced
 
 - The program must pass `casl check` on every call; the irreversible site must be approval-dominated.
-- The approval names the program hash, the site, the capability and the request digest. A different
-  program version, or a request that differs in any byte of method/URL/headers/body, is refused.
+- The approval names the program hash, the site, the capability, the request digest and — when the broker
+  holds a credential — the target account. A different program version, a request that differs in any byte
+  of method/URL/headers/body, or a credential of another principal is refused.
 - An approval is single-use (nonce) and expires; both hold across restarts (journal).
 - Without a valid signature from a trusted key nothing is sent — an `approved: true` assertion is not an input.
 - Destination: `https://` to an allowlisted DNS name only; no redirects, no environment proxy; a name
@@ -60,5 +75,8 @@ keys, one `<pubkey-hex>=<human|personal>` per line. `--auth-env VAR` makes the b
 - The journal chain does not detect truncation of its tail or a full rewrite (needs a signed head).
 - The trust store is a local key list: no validity windows, no revocation, no issuer-signed credentials.
   A fixed `human` key is pseudonymous, not anonymous.
-- Credentials: a static bearer token from the environment; no OAuth refresh.
+- Credentials: a bearer token from the environment. CASL does not refresh tokens; the host supplies a
+  fresh one per call (the identity stays the same). `--account-from-token` reads the token's claims without
+  verifying its signature — a token with false claims is the target's to reject. `--account ID` is a label
+  the host configures; CASL cannot check that it describes the token.
 - The approval UI and the key store are the host's. If the agent can reach the signing key, nothing above holds.

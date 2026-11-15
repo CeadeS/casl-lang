@@ -10,9 +10,16 @@ Signed bytes:      b"casl-approval-v1\\n" + payload.encode("utf-8")      (domain
                    payload text is signed, so no cross-language JSON canonicalization is involved)
 Payload fields:    v=1 · kind="action" · program (hash of the active program version) · cap · site ·
                    request (egress.RequestSpec digest of the ONE approved request) · nonce · exp (unix s)
+                   · account (optional: the identity of the broker-held credential the request runs under)
 
 What a valid approval commits the signer to: exactly this request, at this site, under this capability,
 for this program version, once, before `exp`. Change any of them ⇒ a new approval is needed.
+
+Target account. A request such as `POST /me/events` does not say WHOSE account it acts on — the credential
+the broker adds on the wire decides that. So when the broker holds a credential for the capability, the
+approval must name that credential's identity (`account`) and the broker compares it with the identity of
+the credential it is about to use: same principal ⇒ fine (a refreshed token keeps its identity), another
+principal ⇒ `account_mismatch`. The identity is a label or claims derived from the token — never the secret.
 
 Signer classes (trust-store data, never taken from the approval itself):
   · "personal" — a key bound to a named person (accountable; `subject` names them);
@@ -61,7 +68,7 @@ def make_signed(secret: bytes, payload: dict) -> dict:
 
 
 def verify_signed(env, *, approvers: Dict[str, str], program: Optional[str], cap: str, site: str,
-                  now: int, seen_nonces: Set[str], required: str = "human"
+                  now: int, seen_nonces: Set[str], required: str = "human", account: Optional[str] = None
                   ) -> Tuple[bool, str, str, Optional[dict], Optional[str]]:
     """Check a signed approval. Returns (ok, code, reason, payload, signer_class). Pure except that a
     SUCCESSFUL check records the nonce in `seen_nonces` (one approval ⇒ one token). Order: cheap
@@ -86,12 +93,18 @@ def verify_signed(env, *, approvers: Dict[str, str], program: Optional[str], cap
         p = None
     if not (isinstance(p, dict) and type(p.get("v")) is int and p["v"] == 1 and p.get("kind") == "action"
             and all(isinstance(p.get(k), str) and p.get(k) for k in ("program", "cap", "site", "request", "nonce"))
-            and type(p.get("exp")) is int and -2 ** 63 <= p["exp"] < 2 ** 63):
+            and type(p.get("exp")) is int and -2 ** 63 <= p["exp"] < 2 ** 63
+            and ("account" not in p or (isinstance(p["account"], str) and p["account"]))):
         return False, "malformed", "payload is not a v1 action approval", None, klass
     if not program or p["program"] != program:
         return False, "program_mismatch", "approval is for a different program version", None, klass
     if p["cap"] != cap or p["site"] != site:
         return False, "binding_mismatch", "approval is for a different capability/site", None, klass
+    if p.get("account") != account:
+        # `account` = the identity of the credential the broker holds for this capability (None = none).
+        # Both directions deny: an approval for another principal, one that names no principal although a
+        # credential will be used, and one that names a principal the broker cannot vouch for.
+        return False, "account_mismatch", "approval is for a different target account than the broker holds", None, klass
     if p["exp"] <= now:
         return False, "expired", "approval has expired", None, klass
     if not class_satisfies(klass, required):

@@ -189,13 +189,19 @@ class Broker:
                     return {"allowed": False, "tool": tool, "site": site,
                             "reason": "approval token does not match this request (request-bound consent) — "
                                       "the human approved a different request"}
+            if "account" in rec and rec["account"] != (mc.account if mc is not None else None):
+                # checked AGAIN at execution: the credential the broker would use now must still be the
+                # principal the approval named
+                return {"allowed": False, "tool": tool, "site": site,
+                        "reason": "approval names a different target account than the credential in use"}
             nonce = rec.get("nonce")
             if mc is None:
                 self._log("grant", {"cap": tool, "site": site, "request": rec.get("request"), "nonce": nonce})
             else:
                 # INTENT before the send, durably: if the broker dies after this line, the journal still says
                 # the request may have gone out (replay reads an intent without a result as "unknown").
-                self._log("intent", {"effect": digest, "cap": tool, "site": site, "nonce": nonce})
+                self._log("intent", {"effect": digest, "cap": tool, "site": site, "nonce": nonce,
+                                     "account": rec.get("account")})
                 self._effects[digest] = "unknown"
             rec["used"] = True                            # one-shot: a token authorizes exactly ONE attempt
         if mc is None:
@@ -256,19 +262,31 @@ class Broker:
             # ALWAYS request-bound to the digest the signer committed to (never to a caller-supplied request).
             from casl import approval as _ap
             env = params.get("signed")
+            mc = self.transports.get(cap)
+            account = mc.account if mc is not None else None
+            if mc is not None and mc.inject and account is None:
+                # a credential whose principal is unknown cannot be approved: the signer could not know
+                # whose account the request acts on
+                return {"granted": False, "code": "account_unbound",
+                        "reason": f"the broker holds a credential for {cap!r} without an identity — "
+                                  f"configure its account so approvals can name it"}
             ok, code, reason, payload, klass = _ap.verify_signed(
                 env, approvers=self.approvers, program=self.program_hash, cap=cap, site=site,
-                now=self._now(), seen_nonces=self._nonces, required=self.approval_class.get(cap, "human"))
+                now=self._now(), seen_nonces=self._nonces, required=self.approval_class.get(cap, "human"),
+                account=account)
             if not ok:
                 return {"granted": False, "code": code, "reason": reason}
             # journal the verified approval (payload + signature ⇒ re-verifiable later) BEFORE minting
             self._log("approval", {"nonce": payload["nonce"], "cap": cap, "site": site, "request": payload["request"],
                                    "program": payload["program"], "exp": payload["exp"], "key": env["key"].lower(),
-                                   "class": klass, "payload": env["payload"], "sig": env["sig"]})
+                                   "class": klass, "account": account, "payload": env["payload"], "sig": env["sig"]})
             token = secrets.token_hex(16)
             self._consents[token] = {"cap": cap, "site": site, "request": payload["request"],
-                                     "nonce": payload["nonce"], "used": False}
-            return {"granted": True, "token": token, "cap": cap, "site": site, "code": "ok", "class": klass}
+                                     "nonce": payload["nonce"], "account": account, "used": False}
+            out = {"granted": True, "token": token, "cap": cap, "site": site, "code": "ok", "class": klass}
+            if account is not None:
+                out["account"] = account
+            return out
         if not bool(params.get("approved", False)):
             return {"granted": False, "reason": "approval withheld at the gate (deny-by-default)"}
         token = secrets.token_hex(16)

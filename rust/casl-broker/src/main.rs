@@ -78,6 +78,14 @@ fn main() {
     // PERFORMS and their destination allowlists. Transport: `CASL_BROKER_MOCK_EGRESS` ("200" | "404" |
     // "not_sent" | "unknown") ⇒ a mock answers; `CASL_BROKER_LIVE=1` ⇒ real HTTPS; neither ⇒ nothing is
     // ever sent (outcome `not_sent`).
+    // `CASL_BROKER_EGRESS_ACCOUNT` ("cap=IDENTITY;...") — the identity of that credential, which a signed
+    // approval must name. `cap=@token` derives it from the bearer's JWT claims (issuer/tenant/subject).
+    let accounts: BTreeMap<String, String> = std::env::var("CASL_BROKER_EGRESS_ACCOUNT")
+        .unwrap_or_default()
+        .split(';')
+        .filter_map(|kv| kv.split_once('='))
+        .map(|(cap, id)| (cap.trim().to_string(), id.trim().to_string()))
+        .collect();
     let mock = std::env::var("CASL_BROKER_MOCK_EGRESS").ok();
     let live = std::env::var("CASL_BROKER_LIVE").is_ok_and(|v| v == "1");
     // `CASL_BROKER_EGRESS_AUTH` ("cap=ENVVAR;...") — the broker adds `Authorization: Bearer $ENVVAR`.
@@ -114,6 +122,13 @@ fn main() {
                         .get(cap.trim())
                         .map(|t| vec![("Authorization".to_string(), format!("Bearer {t}"))])
                         .unwrap_or_default(),
+                    account: match accounts.get(cap.trim()).map(String::as_str) {
+                        Some("@token") => auth
+                            .get(cap.trim())
+                            .and_then(|t| egress::account_from_bearer(t)),
+                        Some(id) if !id.is_empty() => Some(id.to_string()),
+                        _ => None,
+                    },
                 },
             );
         }

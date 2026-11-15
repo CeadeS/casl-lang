@@ -183,9 +183,28 @@ mod tests {
         let (tx, rx) = mpsc::channel();
         thread::spawn(move || {
             if let Ok((mut s, _)) = l.accept() {
+                // read the WHOLE request: headers, then `content-length` bytes of body (they may
+                // arrive in separate segments)
+                let mut req: Vec<u8> = Vec::new();
                 let mut buf = [0u8; 8192];
-                let n = s.read(&mut buf).unwrap_or(0);
-                let _ = tx.send(String::from_utf8_lossy(&buf[..n]).to_string());
+                loop {
+                    let text = String::from_utf8_lossy(&req).to_lowercase();
+                    if let Some(end) = text.find("\r\n\r\n") {
+                        let want = text
+                            .lines()
+                            .find_map(|l| l.strip_prefix("content-length:"))
+                            .and_then(|v| v.trim().parse::<usize>().ok())
+                            .unwrap_or(0);
+                        if req.len() >= end + 4 + want {
+                            break;
+                        }
+                    }
+                    match s.read(&mut buf) {
+                        Ok(n) if n > 0 => req.extend_from_slice(&buf[..n]),
+                        _ => break,
+                    }
+                }
+                let _ = tx.send(String::from_utf8_lossy(&req).to_string());
                 match reply {
                     Some(r) => {
                         let _ = s.write_all(r.as_bytes());
@@ -212,7 +231,7 @@ mod tests {
     }
 
     #[test]
-    fn sends_exactly_the_request_and_returns_the_response() {
+    fn sends_the_request_and_returns_the_response() {
         let (url, rx) = server(
             Some("HTTP/1.1 201 Created\r\nContent-Length: 7\r\nConnection: close\r\n\r\ncreated"),
             false,

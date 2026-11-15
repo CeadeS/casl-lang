@@ -88,6 +88,7 @@ host interface — one approved action through the broker (JSON on stdout; docs/
   prepare --program F --site L --request R       what the approver must sign      (0 / 1 rejected / 2 error)
   act     --program F --site L --request R --approval A --approvers K --journal J --allow-hosts H
                                                  perform it     (0 performed / 1 denied / 3 not performed)
+          [--auth-env VAR (--account ID | --account-from-token)]   broker-held credential + its identity
   resolve --journal J --effect ID --outcome performed|not_performed   clarify an unknown outcome
   journal verify J                               check the run journal            (0 intact / 1 broken)
 

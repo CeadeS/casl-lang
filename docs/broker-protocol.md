@@ -64,10 +64,12 @@ and requires `signed`:
 ```
 
 The signature is Ed25519 over `"casl-approval-v1\n" + payload` (the exact payload text). Payload:
-`{"v":1,"kind":"action","program":…,"cap":…,"site":…,"request":<request digest>,"nonce":…,"exp":<unix s>}`.
-Result: `{granted, token?, code, class?, reason?}` with `code` one of `ok`, `unsigned`, `malformed`,
-`unknown_key`, `bad_signature`, `program_mismatch`, `binding_mismatch`, `expired`, `class_insufficient`,
-`replayed`. The token is bound to the signed request digest and is one-shot.
+`{"v":1,"kind":"action","program":…,"cap":…,"site":…,"request":<request digest>,"nonce":…,"exp":<unix s>}`
+plus optional `"account"`: the identity of the broker-held credential the request runs under. It must equal
+the identity the broker has for the capability's credential (both absent when no credential is held).
+Result: `{granted, token?, code, class?, account?, reason?}` with `code` one of `ok`, `unsigned`, `malformed`,
+`unknown_key`, `bad_signature`, `program_mismatch`, `binding_mismatch`, `account_mismatch`, `account_unbound`
+(a credential without an identity), `expired`, `class_insufficient`, `replayed`. The token is bound to the signed request digest and is one-shot.
 
 **`effect` — request and outcome.** `request` = `{method, url, headers, body}`; its digest is
 `sha256(json.dumps({"m","u","h","b"}, sort_keys=True, separators=(",", ":")))` (`h` = sorted `[k, v]` pairs,

@@ -71,6 +71,8 @@ pub struct Verified {
     pub program: String,
     pub exp: i64,
     pub key: String,
+    /// The target account the approval names (identity of the broker-held credential), if any.
+    pub account: Option<String>,
 }
 
 /// A typed denial: a stable code (compared cross-implementation) + a human-readable reason.
@@ -98,6 +100,7 @@ pub fn verify_signed(
     now: i64,
     seen_nonces: &mut BTreeSet<String>,
     required: &str,
+    account: Option<&str>,
 ) -> Result<Verified, Denied> {
     let Some(Value::Object(env)) = env else {
         return deny(
@@ -171,6 +174,12 @@ pub fn verify_signed(
     ) else {
         return deny("malformed", "payload is not a v1 action approval");
     };
+    // optional `account`: absent, or a non-empty string
+    let pa = match p.as_ref().and_then(|p| p.get("account")) {
+        None => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.as_str()),
+        Some(_) => return deny("malformed", "payload is not a v1 action approval"),
+    };
     if program.is_none_or(|have| have.is_empty() || have != pp) {
         return deny(
             "program_mismatch",
@@ -181,6 +190,15 @@ pub fn verify_signed(
         return deny(
             "binding_mismatch",
             "approval is for a different capability/site",
+        );
+    }
+    if pa != account {
+        // `account` = the identity of the credential the broker holds for this capability (None = none).
+        // Both directions deny: another principal, no principal named although a credential will be
+        // used, or a principal the broker cannot vouch for.
+        return deny(
+            "account_mismatch",
+            "approval is for a different target account than the broker holds",
         );
     }
     if exp <= now {
@@ -203,6 +221,7 @@ pub fn verify_signed(
         program: pp.to_string(),
         exp,
         key,
+        account: pa.map(str::to_string),
     })
 }
 

@@ -101,6 +101,9 @@ impl Backend for MockBackend {
     }
 }
 
+/// What a valid consent token is bound to: (request digest, approval nonce, target account).
+type ConsentBinding = (Option<String>, Option<String>, Option<String>);
+
 /// A one-shot consent record minted by the approval gate, bound to (cap, site). (A)
 struct Consent {
     cap: String,
@@ -109,6 +112,8 @@ struct Consent {
     request: Option<String>,
     /// The nonce of the signed approval this token came from (None for a legacy assertion).
     nonce: Option<String>,
+    /// Signed approvals: the target account the approval named (None = no credential involved).
+    account: Option<String>,
     used: bool,
 }
 
@@ -230,7 +235,7 @@ impl Broker {
         cap: &str,
         site: &str,
         request: Option<&serde_json::Value>,
-    ) -> Result<(Option<String>, Option<String>), String> {
+    ) -> Result<ConsentBinding, String> {
         let c = token
             .and_then(|t| self.consents.get(t))
             .filter(|c| !c.used && c.cap == cap && c.site == site)
@@ -247,7 +252,17 @@ impl Broker {
                 );
             }
         }
-        Ok((c.request.clone(), c.nonce.clone()))
+        if c.nonce.is_some() {
+            // a SIGNED approval — checked AGAIN at execution: the credential the broker would use now
+            // must still be the principal the approval named
+            let held = self.mediated.get(cap).and_then(|m| m.account.as_ref());
+            if c.account.as_ref() != held {
+                return Err(
+                    "approval names a different target account than the credential in use".into(),
+                );
+            }
+        }
+        Ok((c.request.clone(), c.nonce.clone(), c.account.clone()))
     }
 
     /// The `effect` method (mirrors `Broker._effect` of the reference). `Err` = an internal failure
@@ -301,7 +316,7 @@ impl Broker {
         let digest = spec.as_ref().map(|s| s.digest());
         if irreversible {
             // (A) an irreversible cap needs a fresh, matching, one-shot consent token.
-            let (bound, nonce) =
+            let (bound, nonce, account) =
                 match self.check_consent(p.approval.as_deref(), &tool, &site, p.request.as_ref()) {
                     Ok(x) => x,
                     Err(reason) => return Ok(deny(reason, None)),
@@ -316,7 +331,7 @@ impl Broker {
                     // still says the request may have gone out (replayed as "unknown").
                     self.log(
                         "intent",
-                        json!({"effect": d, "cap": tool, "site": site, "nonce": nonce}),
+                        json!({"effect": d, "cap": tool, "site": site, "nonce": nonce, "account": account}),
                     )?;
                     self.effects.insert(d.clone(), "unknown".into());
                 }
@@ -515,7 +530,26 @@ impl Broker {
                         return Response::err(id, codes::INTERNAL, format!("bad params: {e}"))
                     }
                 };
-                let r = if !self.approvers.is_empty() {
+                let held = self.mediated.get(&p.tool).and_then(|m| m.account.clone());
+                let unbound = self
+                    .mediated
+                    .get(&p.tool)
+                    .is_some_and(|m| !m.inject.is_empty() && m.account.is_none());
+                let r = if !self.approvers.is_empty() && unbound {
+                    // a credential whose principal is unknown cannot be approved: the signer could not
+                    // know whose account the request acts on
+                    ConsentResult {
+                        granted: false,
+                        token: None,
+                        reason: Some(format!(
+                            "the broker holds a credential for {:?} without an identity — configure its account so approvals can name it",
+                            p.tool
+                        )),
+                        code: Some("account_unbound".into()),
+                        approver_class: None,
+                        account: None,
+                    }
+                } else if !self.approvers.is_empty() {
                     // SIGNED mode: the human is bound by a signature the calling agent cannot produce.
                     // The token is ALWAYS bound to the digest the signer committed to.
                     let now = self.now();
@@ -533,6 +567,7 @@ impl Broker {
                         now,
                         &mut self.nonces,
                         &required,
+                        held.as_deref(),
                     ) {
                         Err(d) => ConsentResult {
                             granted: false,
@@ -540,6 +575,7 @@ impl Broker {
                             reason: Some(d.reason),
                             code: Some(d.code.into()),
                             approver_class: None,
+                            account: None,
                         },
                         Ok(v) => {
                             // journal the verified approval (payload + signature ⇒ re-verifiable
@@ -550,7 +586,7 @@ impl Broker {
                                 "approval",
                                 json!({"nonce": v.nonce, "cap": p.tool, "site": p.site,
                                        "request": v.request, "program": v.program, "exp": v.exp,
-                                       "key": v.key, "class": v.class,
+                                       "key": v.key, "class": v.class, "account": v.account,
                                        "payload": part("payload"), "sig": part("sig")}),
                             ) {
                                 return Response::err(id, codes::INTERNAL, e);
@@ -563,6 +599,7 @@ impl Broker {
                                     site: p.site,
                                     request: Some(v.request),
                                     nonce: Some(v.nonce),
+                                    account: v.account.clone(),
                                     used: false,
                                 },
                             );
@@ -572,6 +609,7 @@ impl Broker {
                                 reason: None,
                                 code: Some("ok".into()),
                                 approver_class: Some(v.class),
+                                account: v.account,
                             }
                         }
                     }
@@ -582,6 +620,7 @@ impl Broker {
                         reason: Some("approval withheld at the gate (deny-by-default)".into()),
                         code: None,
                         approver_class: None,
+                        account: None,
                     }
                 } else {
                     // Legacy (no trust store): `approved` is the UI's assertion. Optionally request-bound.
@@ -606,6 +645,7 @@ impl Broker {
                             site: p.site,
                             request,
                             nonce: None,
+                            account: None,
                             used: false,
                         },
                     );
@@ -615,6 +655,7 @@ impl Broker {
                         reason: None,
                         code: None,
                         approver_class: None,
+                        account: None,
                     }
                 };
                 Response::ok(id, serde_json::to_value(r).unwrap())

@@ -211,6 +211,9 @@ pub struct ConsentResult {
     /// Signed mode: the approver class of the verifying key (`human` | `personal`).
     #[serde(default, rename = "class", skip_serializing_if = "Option::is_none")]
     pub approver_class: Option<String>,
+    /// Signed mode: the target account the approval was verified against (identity, never a secret).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<String>,
 }
 
 // ---- newline-delimited framing (MCP/LSP-style) ----------------------------

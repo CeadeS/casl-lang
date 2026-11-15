@@ -145,6 +145,9 @@ class MediatedCapability:
     # Headers the BROKER adds on the wire (e.g. Authorization). The secret lives only here: the calling
     # agent never sees it, so it cannot reach the target system around the broker.
     inject: Tuple[Tuple[str, str], ...] = ()
+    # The IDENTITY of that credential (a credential reference, or provider/tenant/subject derived from the
+    # token) — what a signed approval must name. Stable across token refresh; never the secret itself.
+    account: Optional[str] = None
 
     def conflicting_header(self, req: RequestSpec) -> Optional[str]:
         held = {k.lower() for k, _ in self.inject}

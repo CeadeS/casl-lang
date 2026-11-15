@@ -32,6 +32,7 @@ const VALFLAGS: &[&str] = &[
     "--approvers",
     "--allow-hosts",
     "--auth-env",
+    "--account",
     "--require-class",
     "--mock-egress",
     "--effect",
@@ -141,6 +142,45 @@ fn read_json(path: &str) -> Result<Value, (i32, String)> {
     serde_json::from_str(&text).map_err(|e| (2, format!("{path}: not JSON ({e})")))
 }
 
+/// The credential the broker will add on the wire, and its IDENTITY — what the approval must name.
+/// `--auth-env VAR` needs exactly one of `--account ID` (a credential reference you configure) or
+/// `--account-from-token` (issuer/tenant/subject read from the JWT the broker holds).
+type Credential = (Vec<(String, String)>, Option<String>);
+
+fn credential(a: &Args) -> Result<Credential, (i32, String)> {
+    let (explicit, derive) = (a.val("account"), a.has("account-from-token"));
+    let Some(var) = a.val("auth-env") else {
+        if explicit.is_some() || derive {
+            return Err((
+                2,
+                "--account/--account-from-token name a credential: give --auth-env VAR too".into(),
+            ));
+        }
+        return Ok((Vec::new(), None));
+    };
+    let token = match std::env::var(var) {
+        Ok(t) if !t.is_empty() => t,
+        _ => return Err((2, format!("--auth-env {var}: the variable is not set"))),
+    };
+    let account = match (explicit, derive) {
+        (Some(id), false) if !id.is_empty() => id.to_string(),
+        (None, true) => egress::account_from_bearer(&token).ok_or((
+            2,
+            "--account-from-token: the credential is not a JWT with `iss` and a subject; use --account ID".to_string(),
+        ))?,
+        _ => {
+            return Err((
+                2,
+                "--auth-env needs exactly one of --account ID or --account-from-token (the approval must name whose account the request acts on)".into(),
+            ))
+        }
+    };
+    Ok((
+        vec![("Authorization".to_string(), format!("Bearer {token}"))],
+        Some(account),
+    ))
+}
+
 fn fail(code: i32, msg: String) -> i32 {
     println!("{}", json!({"status": "error", "error": msg}));
     code
@@ -166,11 +206,18 @@ pub fn cmd_prepare(args: &[String]) -> i32 {
             "request is not an object {method, url, headers, body}".into(),
         );
     };
+    let account = match credential(&a) {
+        Ok((_, account)) => account,
+        Err((c, m)) => return fail(c, m),
+    };
+    let mut sign = json!({"v": 1, "kind": "action", "program": l.hash, "cap": l.site.cap,
+                          "site": l.site_name, "request": digest});
+    if let Some(id) = account {
+        sign["account"] = json!(id); // whose account the request acts on — show it to the approver
+    }
     println!(
         "{}",
-        json!({"status": "ok", "irreversible": l.site.irreversible,
-               "sign": {"v": 1, "kind": "action", "program": l.hash, "cap": l.site.cap,
-                        "site": l.site_name, "request": digest},
+        json!({"status": "ok", "irreversible": l.site.irreversible, "sign": sign,
                "domain": "casl-approval-v1\n"})
     );
     0
@@ -259,15 +306,7 @@ fn act(a: &Args) -> Result<(i32, Value), (i32, String)> {
     } else if let Some(jp) = a.val("journal") {
         b = open_journal(b, jp)?;
     }
-    let inject = match a.val("auth-env") {
-        None => Vec::new(),
-        Some(var) => match std::env::var(var) {
-            Ok(tok) if !tok.is_empty() => {
-                vec![("Authorization".to_string(), format!("Bearer {tok}"))]
-            }
-            _ => return Err((2, format!("--auth-env {var}: the variable is not set"))),
-        },
-    };
+    let (inject, account) = credential(a)?;
     let transport: Box<dyn egress::EgressTransport> = match a.val("mock-egress") {
         Some(m) => Box::new(egress::MockEgress::from_spec(m)),
         None => Box::new(live::LiveTransport::new()),
@@ -278,6 +317,7 @@ fn act(a: &Args) -> Result<(i32, Value), (i32, String)> {
             allow_hosts: hosts,
             transport,
             inject,
+            account,
         },
     );
     let internal = |e: String| (2, e);

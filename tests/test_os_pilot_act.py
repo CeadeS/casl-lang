@@ -62,13 +62,15 @@ class Host:
             json.dump(obj, f, ensure_ascii=False)
         return path
 
-    def prepare(self, req):
-        code, out = _run("prepare", "--program", PROGRAM, "--site", "Create", "--request", self.write("req.json", req))
+    def prepare(self, req, *cred, env=None):
+        code, out = _run("prepare", "--program", PROGRAM, "--site", "Create", "--request", self.write("req.json", req),
+                         *cred, env=env)
         assert code == 0 and out["irreversible"] is True, out
         return out["sign"]
 
-    def approve(self, req, nonce, sk=SK):
-        return self.write(f"approval-{nonce}.json", approval.make_signed(sk, {**self.prepare(req), "nonce": nonce, "exp": EXP}))
+    def approve(self, req, nonce, *cred, sk=SK, env=None):
+        payload = {**self.prepare(req, *cred, env=env), "nonce": nonce, "exp": EXP}
+        return self.write(f"approval-{nonce}.json", approval.make_signed(sk, payload))
 
     def act(self, req, approval_path, mock="201", **extra):
         args = ["act", "--program", PROGRAM, "--site", "Create", "--request", self.write("act-req.json", req),
@@ -164,8 +166,11 @@ def test_caller_cannot_supply_the_broker_held_credential(tmp_path):
     h = Host(tmp_path)
     sneaky = {**REQ, "headers": {**REQ["headers"], "authorization": "Bearer stolen"}}
     code, out = _run(*["act", "--program", PROGRAM, "--site", "Create", "--request", h.write("r.json", sneaky),
-                       "--approval", h.approve(sneaky, "n1"), "--approvers", h.approvers, "--journal", h.journal,
-                       "--allow-hosts", "tasks.example", "--mock-egress", "201", "--auth-env", "PILOT_TOKEN"],
+                       "--approval", h.approve(sneaky, "n1", "--auth-env", "PILOT_TOKEN", "--account", "acct-a",
+                                               env={"PILOT_TOKEN": "s3cret"}),
+                       "--approvers", h.approvers, "--journal", h.journal,
+                       "--allow-hosts", "tasks.example", "--mock-egress", "201", "--auth-env", "PILOT_TOKEN",
+                       "--account", "acct-a"],
                      env={"PILOT_TOKEN": "s3cret"})
     assert code == 1 and "held by the broker" in out["effect"]["reason"], out
     assert "s3cret" not in json.dumps(out)
@@ -182,3 +187,51 @@ def test_rejected_program_is_not_executed(tmp_path):
                      "--approval", h.approve(REQ, "n1"), "--approvers", h.approvers, "--journal", h.journal,
                      "--allow-hosts", "tasks.example", "--mock-egress", "201")
     assert code == 1 and "REJECTED" in out["error"], out
+
+
+# -- issue #2: the approval names the target account (identity of the broker-held credential) ------------
+def _jwt(**claims):
+    import base64
+    enc = lambda o: base64.urlsafe_b64encode(json.dumps(o).encode()).rstrip(b"=").decode()   # noqa: E731
+    return f"{enc({'alg': 'none'})}.{enc(claims)}.signature"
+
+
+ALICE = dict(iss="https://login.example/tenant-1/v2.0", tid="tenant-1", oid="alice-oid", sub="pairwise-1")
+BOB = {**ALICE, "oid": "bob-oid"}
+CRED = ("--auth-env", "PILOT_TOKEN", "--account-from-token")
+
+
+def test_same_request_other_principal_is_denied(tmp_path):
+    """The reproduction from the issue: one signed request to an implicit-account endpoint, two bearers."""
+    h = Host(tmp_path)
+    me = {**REQ, "url": "https://tasks.example/v1.0/me/events"}
+    alice = {"PILOT_TOKEN": _jwt(**ALICE, exp=1)}
+    sign = h.prepare(me, *CRED, env=alice)
+    assert sign["account"] == "jwt:iss=https://login.example/tenant-1/v2.0;tid=tenant-1;sub=alice-oid"
+    signed = h.approve(me, "n1", *CRED, env=alice)
+
+    def act(env, approval_path):
+        return _run("act", "--program", PROGRAM, "--site", "Create", "--request", h.write("r.json", me),
+                    "--approval", approval_path, "--approvers", h.approvers, "--journal", h.journal,
+                    "--allow-hosts", "tasks.example", "--mock-egress", "201", *CRED, env=env)
+
+    code, out = act({"PILOT_TOKEN": _jwt(**BOB, exp=1)}, signed)                 # swapped principal
+    assert code == 1 and out["consent"]["code"] == "account_mismatch" and out["effect"] is None, out
+    code, out = act({"PILOT_TOKEN": _jwt(**ALICE, exp=2)}, h.approve(me, "n2", *CRED, env=alice))   # refreshed token
+    assert code == 0 and out["status"] == "performed" and out["consent"]["account"] == sign["account"], out
+    with open(h.journal, "rb") as f:
+        raw = f.read()
+    assert b"alice-oid" in raw and _jwt(**ALICE, exp=2).encode() not in raw       # identity yes, token no
+
+
+def test_credential_needs_an_identity(tmp_path):
+    h = Host(tmp_path)
+    base = ["--program", PROGRAM, "--site", "Create", "--request", h.write("r.json", REQ)]
+    code, out = _run("prepare", *base, "--auth-env", "PILOT_TOKEN", env={"PILOT_TOKEN": "opaque"})
+    assert code == 2 and "--account" in out["error"], out
+    code, out = _run("prepare", *base, "--auth-env", "PILOT_TOKEN", "--account-from-token", env={"PILOT_TOKEN": "opaque"})
+    assert code == 2 and "not a JWT" in out["error"], out
+    code, out = _run("prepare", *base, "--auth-env", "PILOT_TOKEN", "--account", "graph-work", env={"PILOT_TOKEN": "opaque"})
+    assert code == 0 and out["sign"]["account"] == "graph-work", out
+    code, out = _run("prepare", *base, "--account", "graph-work")
+    assert code == 2, out

@@ -256,6 +256,63 @@ pub struct Mediated {
     /// Headers the BROKER adds on the wire (e.g. `Authorization`). The secret lives only here: the
     /// calling agent never sees it, so it cannot reach the target system around the broker.
     pub inject: Vec<(String, String)>,
+    /// The IDENTITY of that credential (a credential reference, or issuer/tenant/subject derived from
+    /// the token) — what a signed approval must name. Stable across token refresh; never the secret.
+    pub account: Option<String>,
+}
+
+fn b64url_decode(s: &str) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(s.len() * 3 / 4);
+    let (mut acc, mut bits) = (0u32, 0u8);
+    for c in s.bytes() {
+        let v = match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'-' | b'+' => 62,
+            b'_' | b'/' => 63,
+            b'=' => break,
+            _ => return None,
+        };
+        acc = (acc << 6) | u32::from(v);
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+            acc &= (1 << bits) - 1;
+        }
+    }
+    Some(out)
+}
+
+/// Derive a credential identity from a bearer token that is a JWT: `jwt:iss=…;tid=…;sub=…` (`tid` only
+/// if present; `sub` = the `oid` claim when present — stable per tenant — else `sub`).
+///
+/// The broker reads the claims of the token IT holds; it does not verify the token's signature and does
+/// not need to: a token whose claims lie is rejected by the target. The point is to name the principal
+/// the request will run as, so that a refreshed token (same claims) keeps its identity and a token of
+/// another principal does not. `None` = not a JWT with `iss` and a subject ⇒ configure the account
+/// explicitly instead.
+pub fn account_from_bearer(token: &str) -> Option<String> {
+    let mut parts = token.trim().split('.');
+    let (Some(_header), Some(payload), Some(_sig), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return None;
+    };
+    let claims: Value = serde_json::from_slice(&b64url_decode(payload)?).ok()?;
+    let s = |k: &str| {
+        claims
+            .get(k)
+            .and_then(Value::as_str)
+            .filter(|v| !v.is_empty() && !v.contains(';'))
+    };
+    let iss = s("iss")?;
+    let sub = s("oid").or_else(|| s("sub"))?;
+    Some(match s("tid") {
+        Some(tid) => format!("jwt:iss={iss};tid={tid};sub={sub}"),
+        None => format!("jwt:iss={iss};sub={sub}"),
+    })
 }
 
 impl Mediated {
@@ -337,6 +394,21 @@ mod tests {
         let mut s = String::new();
         py_json_string("a\"b\\c\nä😀\u{7f}", &mut s);
         assert_eq!(s, "\"a\\\"b\\\\c\\n\\u00e4\\ud83d\\ude00\\u007f\"");
+    }
+
+    #[test]
+    fn account_identity_from_a_jwt_bearer() {
+        // payloads: {"iss":"https://sts.example/t1/","tid":"t1","oid":"u-1","sub":"pairwise","exp":N}
+        let a1 = "e30.eyJpc3MiOiJodHRwczovL3N0cy5leGFtcGxlL3QxLyIsInRpZCI6InQxIiwib2lkIjoidS0xIiwic3ViIjoicGFpcndpc2UiLCJleHAiOjF9.sig";
+        let a2 = "e30.eyJpc3MiOiJodHRwczovL3N0cy5leGFtcGxlL3QxLyIsInRpZCI6InQxIiwib2lkIjoidS0xIiwic3ViIjoicGFpcndpc2UiLCJleHAiOjJ9.other";
+        let b = "e30.eyJpc3MiOiJodHRwczovL3N0cy5leGFtcGxlL3QxLyIsInRpZCI6InQxIiwib2lkIjoidS0yIiwic3ViIjoicGFpcndpc2UiLCJleHAiOjF9.sig";
+        let id = account_from_bearer(a1).unwrap();
+        assert_eq!(id, "jwt:iss=https://sts.example/t1/;tid=t1;sub=u-1");
+        assert_eq!(account_from_bearer(a2).unwrap(), id); // refreshed token, same principal
+        assert_ne!(account_from_bearer(b).unwrap(), id); // another principal
+        for not_jwt in ["opaque-token", "a.b", "a.!!.c", "e30.e30.sig", ""] {
+            assert!(account_from_bearer(not_jwt).is_none(), "{not_jwt}");
+        }
     }
 
     #[test]

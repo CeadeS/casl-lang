@@ -10,8 +10,9 @@ same file without agreeing on a JSON canonical form.
 
 Kinds (the pilot's four records + resolution):
   run       {program, impl, protocol}                 — a broker started for this program version
-  approval  {nonce, cap, site, request, program, exp, key, class, payload, sig}   — a verified SIGNED approval
-  intent    {effect, cap, site, nonce}                — written BEFORE an irreversible request is sent
+  approval  {nonce, cap, site, request, program, exp, key, class, account, payload, sig}   — a verified SIGNED approval
+  intent    {effect, cap, site, nonce, account}       — written BEFORE an irreversible request is sent
+                                                        (account = identity of the credential used; never a secret)
   result    {effect, outcome, status, body_sha256}    — performed | rejected | not_sent | unknown
   resolve   {effect, outcome, note}                   — an unknown outcome clarified at the target system
   grant     {cap, site, request, nonce}               — an irreversible cap granted that the broker does not perform

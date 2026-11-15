@@ -26,6 +26,11 @@ the record). Both brokers, pinned by shared corpora (`tests/test_approval_signed
   addresses must be public; only failures that prove the request never left count as `not_sent`.
 - **Broker-held credentials**: a mediated capability can add headers on the wire (`Authorization`); a request
   that supplies such a header itself is refused.
+- **Approvals name the target account** (casl-lang#2): when the broker holds a credential for a capability,
+  the approval must carry that credential's identity (`account`); it is compared at consent and again at
+  execution (`account_mismatch`, `account_unbound`). Identity = a configured reference or
+  issuer/tenant/subject derived from the JWT (`--account ID` | `--account-from-token`); journaled, never
+  the secret. `tests/test_account_binding.py`.
 - **Host interface** (`casl prepare | act | resolve | journal verify`, Rust CLI): one approved action through
   the broker, JSON out. Template `examples/os_pilot/create_task.casl`; walkthrough `docs/os-pilot.md`;
   end-to-end acceptance `tests/test_os_pilot_act.py`.
