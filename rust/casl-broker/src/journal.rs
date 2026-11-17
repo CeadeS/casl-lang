@@ -38,6 +38,10 @@ pub enum Conflict {
     Unresolved(i64),
     /// `resolve`: that attempt is not its scope's latest unknown one.
     NotUnknown,
+    /// `ctx_grant`: this very grant is already on record.
+    Exists,
+    /// `ctx_grant`: another grant is on record under this id.
+    DuplicateId,
 }
 
 /// Why a reservation did not write.
@@ -63,6 +67,17 @@ pub struct State {
     pub attempts: BTreeMap<i64, Scope>,
     /// scope → (latest outcome, attempt)
     pub scopes: BTreeMap<Scope, (String, i64)>,
+    // -- context grants (docs/context-grants.md) --
+    /// grant id → signed envelope (re-verified at every decision)
+    pub grants: BTreeMap<String, Value>,
+    /// revoked grant / frame ids
+    pub revoked: BTreeSet<String>,
+    /// grant id → accesses counted against it
+    pub used: BTreeMap<String, i64>,
+    /// seq → a GRANTED access (what a later disclosure may cite)
+    pub accesses: BTreeMap<i64, Value>,
+    /// request id → the access that waits for a grant (with its `seq`)
+    pub pending: BTreeMap<String, Value>,
 }
 
 impl State {
@@ -82,6 +97,41 @@ impl State {
                     if let Some(n) = s("nonce") {
                         self.intent_nonces.insert(n);
                     }
+                }
+            }
+            "ctx_grant" => {
+                if let (Some(id), Some(env @ Value::Object(_))) = (s("id"), b.get("envelope")) {
+                    self.grants.entry(id).or_insert_with(|| env.clone());
+                }
+            }
+            "revoke" => {
+                if let Some(id) = s("id") {
+                    self.revoked.insert(id);
+                }
+            }
+            "access" => {
+                let Some(request) = s("request") else { return };
+                match b.get("decision").and_then(Value::as_str) {
+                    Some("granted") => {
+                        self.accesses.insert(seq, b.clone());
+                        for i in b
+                            .get("counted")
+                            .and_then(Value::as_array)
+                            .into_iter()
+                            .flatten()
+                        {
+                            if let Some(i) = i.as_str() {
+                                *self.used.entry(i.to_string()).or_insert(0) += 1;
+                            }
+                        }
+                        self.pending.remove(&request);
+                    }
+                    Some("needs_grant") => {
+                        let mut waiting = b.clone();
+                        waiting["seq"] = serde_json::json!(seq);
+                        self.pending.insert(request, waiting);
+                    }
+                    _ => {}
                 }
             }
             "result" | "resolve" => {
@@ -130,6 +180,15 @@ impl State {
                 }
                 if s(b, "nonce").is_some_and(|n| self.intent_nonces.contains(&n)) {
                     return Err(Conflict::Replayed);
+                }
+            }
+            "ctx_grant" => {
+                if let Some(existing) = s(b, "id").and_then(|id| self.grants.get(&id)) {
+                    return Err(if Some(existing) == b.get("envelope") {
+                        Conflict::Exists
+                    } else {
+                        Conflict::DuplicateId
+                    });
                 }
             }
             "resolve" => {
@@ -187,6 +246,41 @@ impl MemoryLedger {
         self.state.apply(self.seq, kind, body);
         self.seq
     }
+
+    /// `f(state) → (entries, result)`: decide and write as one step. Returns (seqs, result).
+    pub fn transact<R>(
+        &mut self,
+        f: impl FnOnce(&State) -> Result<(Vec<(String, Value)>, R), String>,
+    ) -> Result<(Vec<i64>, R), String> {
+        let (entries, result) = f(&self.state)?;
+        let seqs = entries.iter().map(|(k, b)| self.append(k, b)).collect();
+        Ok((seqs, result))
+    }
+}
+
+/// Insert one entry at the end of the chain (inside the caller's write transaction).
+fn insert(conn: &Connection, kind: &str, text: &str, ts: i64) -> Result<i64, rusqlite::Error> {
+    let last: Option<(i64, String)> = conn
+        .query_row(
+            "SELECT seq, hash FROM entries ORDER BY seq DESC LIMIT 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .map(Some)
+        .or_else(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => Ok(None),
+            other => Err(other),
+        })?;
+    let (seq, prev) = match last {
+        Some((s, h)) => (s + 1, h),
+        None => (1, GENESIS.to_string()),
+    };
+    let hash = entry_hash(&prev, seq, ts, kind, text);
+    conn.execute(
+        "INSERT INTO entries VALUES (?1,?2,?3,?4,?5,?6)",
+        params![seq, ts, kind, text, prev, hash],
+    )?;
+    Ok(seq)
 }
 
 fn read_entries(conn: &Connection) -> Result<Vec<Entry>, String> {
@@ -293,30 +387,31 @@ impl Journal {
                 .guard(kind, &mut body)
                 .map_err(ReserveError::Conflict)?;
         }
-        let text = body.to_string();
-        let last: Option<(i64, String)> = tx
-            .query_row(
-                "SELECT seq, hash FROM entries ORDER BY seq DESC LIMIT 1",
-                [],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )
-            .map(Some)
-            .or_else(|e| match e {
-                rusqlite::Error::QueryReturnedNoRows => Ok(None),
-                other => Err(io(other)),
-            })?;
-        let (seq, prev) = match last {
-            Some((s, h)) => (s + 1, h),
-            None => (1, GENESIS.to_string()),
-        };
-        let hash = entry_hash(&prev, seq, ts, kind, &text);
-        tx.execute(
-            "INSERT INTO entries VALUES (?1,?2,?3,?4,?5,?6)",
-            params![seq, ts, kind, text, prev, hash],
-        )
-        .map_err(io)?;
+        let seq = insert(&tx, kind, &body.to_string(), ts).map_err(io)?;
         tx.commit().map_err(io)?;
         Ok((seq, body))
+    }
+
+    /// `f(state) → (entries, result)`: DECIDE on the replayed state and WRITE the decision in one write
+    /// transaction — the state `f` saw is the state the entries are appended to, whichever other broker
+    /// process runs meanwhile. Returns (seqs, result).
+    pub fn transact<R>(
+        &mut self,
+        ts: i64,
+        f: impl FnOnce(&State) -> Result<(Vec<(String, Value)>, R), String>,
+    ) -> Result<(Vec<i64>, R), String> {
+        let io = |e: rusqlite::Error| format!("journal: {e}");
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(io)?;
+        let (entries, result) = f(&state_of(&tx)?)?;
+        let mut seqs = Vec::new();
+        for (kind, body) in &entries {
+            seqs.push(insert(&tx, kind, &body.to_string(), ts).map_err(io)?);
+        }
+        tx.commit().map_err(io)?;
+        Ok((seqs, result))
     }
 
     pub fn entries(&self) -> Result<Vec<Entry>, String> {

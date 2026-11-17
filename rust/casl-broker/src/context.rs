@@ -55,10 +55,40 @@ fn path_ok(v: &Value, k: &str) -> bool {
     v.get(k).and_then(Value::as_str).is_some_and(valid_path)
 }
 
-fn receiver_ok(v: &Value, k: &str) -> bool {
-    v.get(k)
-        .and_then(Value::as_str)
-        .is_some_and(|r| parse_receiver(r).is_some())
+/// A receiver a GRANT or a REQUEST may name: a workflow, or an endpoint WITH its model. Protected content
+/// is released to one concrete model, never to "whatever runs at that endpoint".
+fn concrete_receiver(v: &Value, k: &str) -> bool {
+    match v.get(k).and_then(Value::as_str).and_then(parse_receiver) {
+        Some(surf::context::Receiver::Workflow(_)) => true,
+        Some(surf::context::Receiver::Endpoint { model, .. }) => !model.is_empty(),
+        None => false,
+    }
+}
+
+/// `value` as JSON text with sorted keys and compact separators — the form
+/// `json.dumps(sort_keys=True, separators=(",", ":"), ensure_ascii=False)` writes.
+pub fn canonical(v: &Value) -> String {
+    match v {
+        Value::Object(m) => {
+            let mut keys: Vec<&String> = m.keys().collect();
+            keys.sort();
+            let parts: Vec<String> = keys
+                .iter()
+                .map(|k| format!("{}:{}", Value::String((*k).clone()), canonical(&m[*k])))
+                .collect();
+            format!("{{{}}}", parts.join(","))
+        }
+        Value::Array(a) => {
+            let parts: Vec<String> = a.iter().map(canonical).collect();
+            format!("[{}]", parts.join(","))
+        }
+        other => other.to_string(),
+    }
+}
+
+/// A stable id for a resolved request: the same access asked again has the same id.
+pub fn request_id(q: &Value) -> String {
+    crate::journal::sha256_hex(canonical(q).as_bytes())
 }
 
 fn str_of<'a>(v: &'a Value, k: &str) -> &'a str {
@@ -107,7 +137,7 @@ pub fn valid_request(q: &Value) -> bool {
     }
     match op_of(q) {
         Some("disclose") => {
-            receiver_ok(q, "receiver")
+            concrete_receiver(q, "receiver")
                 && q.get("origins").and_then(Value::as_array).is_some_and(|o| {
                     !o.is_empty()
                         && o.iter().all(|u| {
@@ -140,7 +170,7 @@ pub fn valid_grant(g: &Value) -> bool {
         return false;
     }
     if op == "disclose" {
-        receiver_ok(g, "receiver")
+        concrete_receiver(g, "receiver")
     } else {
         none(g, "receiver")
     }

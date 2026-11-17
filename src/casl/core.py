@@ -41,7 +41,27 @@ CONTEXT_OPS = ("search", "read", "disclose")
 _PATH_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._~!$&'()+,;=:@-")
 _HOST_CHARS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789.-")
 _NAME_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_")
-_MODEL_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:-")
+_MODEL_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:-/")
+
+
+def valid_model(m) -> bool:
+    """A model id as providers spell it, including `vendor/model`: no empty path part."""
+    return (isinstance(m, str) and 0 < len(m) <= 256 and all(c in _MODEL_CHARS for c in m)
+            and m[0] != "/" and m[-1] != "/" and "//" not in m)
+
+
+def valid_authority(a) -> bool:
+    """An endpoint authority: `<host>` or `<host>:<port>`. The port is part of the identity of an endpoint;
+    the default port 443 is never written (one spelling per endpoint), so `host:443` is unsupported."""
+    if not isinstance(a, str):
+        return False
+    host, sep, port = a.partition(":")
+    if not valid_host(host):
+        return False
+    if not sep:
+        return True
+    return (0 < len(port) <= 5 and all(c in "0123456789" for c in port) and port[0] != "0"
+            and int(port) <= 65535 and port != "443")
 
 
 def valid_host(h) -> bool:
@@ -69,8 +89,9 @@ def path_covers(scope, path) -> bool:
 
 
 def parse_receiver(r):
-    """A disclosure RECEIVER: `endpoint:<host><path>[#<model>]` (a resolved model/provider endpoint) or
-    `workflow:<Name>` (another workflow). Returns (kind, host_or_name, path, model) or None if unsupported."""
+    """A disclosure RECEIVER: `endpoint:<host>[:<port>]<path>[#<model>]` (a resolved model/provider endpoint)
+    or `workflow:<Name>` (another workflow). Returns (kind, authority_or_name, path, model) or None if
+    unsupported."""
     if not isinstance(r, str):
         return None
     if r.startswith("workflow:"):
@@ -83,9 +104,9 @@ def parse_receiver(r):
         if slash <= 0:
             return None
         host, path = rest[:slash], rest[slash:]
-        if not (valid_host(host) and valid_path(path)):
+        if not (valid_authority(host) and valid_path(path)):
             return None
-        if sep and not (model and all(c in _MODEL_CHARS for c in model)):
+        if sep and not valid_model(model):
             return None
         return ("endpoint", host, path, model)
     return None

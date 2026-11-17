@@ -66,13 +66,28 @@ def declared(protocol, cap: str) -> Optional[dict]:
 
 
 # -- well-formedness of the objects ------------------------------------------------------------------
+def _concrete_receiver(r) -> bool:
+    """A receiver a GRANT or a REQUEST may name: a workflow, or an endpoint WITH its model. Protected
+    content is released to one concrete model, never to "whatever runs at that endpoint"."""
+    p = core.parse_receiver(r)
+    return p is not None and (p[0] == "workflow" or p[3] != "")
+
+
+def request_id(q: dict) -> str:
+    """A stable id for a resolved request: the same access asked again has the same id (a pending
+    authorization can be correlated, a repeated ask is recognized)."""
+    import hashlib
+    return hashlib.sha256(json.dumps(q, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+                          .encode("utf-8")).hexdigest()
+
+
 def valid_request(q) -> bool:
     if not (isinstance(q, dict) and _str(q.get("program")) and _str(q.get("cap"))
             and q.get("op") in core.CONTEXT_OPS and (q.get("instance") is None or _str(q.get("instance")))):
         return False
     if q["op"] == "disclose":
         o = q.get("origins")
-        return (core.parse_receiver(q.get("receiver")) is not None and isinstance(o, list) and len(o) > 0
+        return (_concrete_receiver(q.get("receiver")) and isinstance(o, list) and len(o) > 0
                 and all(isinstance(u, dict) and _str(u.get("account")) and core.valid_host(u.get("source"))
                         and core.valid_path(u.get("resource")) for u in o))
     return _str(q.get("account")) and core.valid_host(q.get("source")) and core.valid_path(q.get("resource"))
@@ -87,7 +102,7 @@ def valid_grant(g) -> bool:
             and _int(g.get("exp")) and (g.get("uses") is None or (_int(g.get("uses")) and g["uses"] >= 1))):
         return False
     if g["op"] == "disclose":
-        return core.parse_receiver(g.get("receiver")) is not None
+        return _concrete_receiver(g.get("receiver"))
     return g.get("receiver") is None
 
 

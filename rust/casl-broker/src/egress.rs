@@ -163,6 +163,56 @@ pub fn check_destination(url: &str, allow_hosts: &[String]) -> Result<(), String
     Ok(())
 }
 
+/// (host, port | None, path) of a URL in the strict form `https://host[:port][/path][?query][#fragment]`
+/// — mirrors `egress.split_url`. The query is not part of the path (a context scope is a path). `None` =
+/// not of that form. Port 443 is reported as `None` (one spelling per endpoint).
+pub fn split_url(url: &str) -> Option<(String, Option<String>, String)> {
+    let rest = match url.get(..8) {
+        Some(p) if p.eq_ignore_ascii_case("https://") => &url[8..],
+        _ => return None,
+    };
+    if !url.is_ascii() || url.bytes().any(|b| b <= b' ' || b == 0x7f || b == b'\\') {
+        return None;
+    }
+    let cut = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let (authority, tail) = rest.split_at(cut);
+    let (host, port) = match authority.split_once(':') {
+        Some((h, p)) => (h, Some(p)),
+        None => (authority, None),
+    };
+    if let Some(p) = port {
+        if p.is_empty()
+            || p.len() > 5
+            || !p.bytes().all(|b| b.is_ascii_digit())
+            || p.starts_with('0')
+        {
+            return None;
+        }
+    }
+    let host = host.to_ascii_lowercase();
+    if host.is_empty()
+        || !host
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'.' || b == b'-')
+    {
+        return None;
+    }
+    let path = if tail.starts_with('/') {
+        tail.split(['?', '#']).next().unwrap_or("")
+    } else {
+        ""
+    };
+    Some((
+        host,
+        port.filter(|p| *p != "443").map(str::to_string),
+        if path.is_empty() {
+            "/".to_string()
+        } else {
+            path.to_string()
+        },
+    ))
+}
+
 /// The outcome a response status proves (`egress.classify`): 2xx performed · 4xx rejected · else unknown.
 pub fn classify(status: i64) -> &'static str {
     match status {

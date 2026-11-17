@@ -17,6 +17,12 @@ Kinds (the pilot's four records + resolution):
   result    {attempt, effect, account, outcome, status, body_sha256}   — performed | rejected | not_sent | unknown
   resolve   {attempt, effect, account, outcome, note} — an unknown outcome clarified at the target system
   grant     {cap, site, request, nonce}               — an irreversible cap granted that the broker does not perform
+Context accesses (docs/context-grants.md):
+  ctx_grant {id, envelope}                            — a verified context grant (the signed envelope, whole)
+  revoke    {id}                                      — a grant or frame revoked (unsigned: it only removes authority)
+  access    {request, decision, code, program, instance, site, cap, op, account, source, resource |
+             receiver, origins, grants, counted, by}  — one decision about one access; never content
+  access_result {access, outcome, status, body_sha256} — how a broker-performed access ended
 
 Derived state (`State`), replayed from the entries:
   · the used approval nonces — one approval, one token, across restarts and across processes;
@@ -63,6 +69,12 @@ class State:
         self.intent_nonces: Set[str] = set()                            # approvals that produced an attempt
         self.attempts: Dict[int, Tuple[Optional[str], str]] = {}        # attempt -> scope (account, digest)
         self.scopes: Dict[Tuple[Optional[str], str], Tuple[str, int]] = {}   # scope -> (outcome, attempt)
+        # context grants (docs/context-grants.md)
+        self.grants: Dict[str, dict] = {}        # grant id -> signed envelope (re-verified at every decision)
+        self.revoked: Set[str] = set()           # revoked grant / frame ids
+        self.used: Dict[str, int] = {}           # grant id -> accesses counted against it
+        self.accesses: Dict[int, dict] = {}      # seq -> a GRANTED access (what a later disclosure may cite)
+        self.pending: Dict[str, dict] = {}       # request id -> the access that waits for a grant (+ "seq")
 
     def apply(self, seq: int, kind: str, b: dict) -> None:
         if kind == "approval" and isinstance(b.get("nonce"), str):
@@ -74,6 +86,19 @@ class State:
             self.scopes[scope] = ("unknown", seq)
             if isinstance(b.get("nonce"), str):
                 self.intent_nonces.add(b["nonce"])
+        elif kind == "ctx_grant" and isinstance(b.get("id"), str) and isinstance(b.get("envelope"), dict):
+            self.grants.setdefault(b["id"], b["envelope"])
+        elif kind == "revoke" and isinstance(b.get("id"), str):
+            self.revoked.add(b["id"])
+        elif kind == "access" and isinstance(b.get("request"), str):
+            if b.get("decision") == "granted":
+                self.accesses[seq] = b
+                for i in b.get("counted") or []:
+                    if isinstance(i, str):
+                        self.used[i] = self.used.get(i, 0) + 1
+                self.pending.pop(b["request"], None)
+            elif b.get("decision") == "needs_grant":
+                self.pending[b["request"]] = dict(b, seq=seq)
         elif kind in ("result", "resolve") and isinstance(b.get("outcome"), str):
             attempt = b.get("attempt")
             if type(attempt) is not int:
@@ -95,6 +120,9 @@ class State:
                 raise Conflict("unresolved", st[1])
             if b.get("nonce") is not None and b["nonce"] in self.intent_nonces:
                 raise Conflict("replayed")
+        elif kind == "ctx_grant":
+            if b.get("id") in self.grants:
+                raise Conflict("exists" if self.grants[b["id"]] == b.get("envelope") else "duplicate_id")
         elif kind == "resolve":
             scope = self.attempts.get(b.get("attempt"))
             if scope is None or self.scopes.get(scope) != ("unknown", b["attempt"]):
@@ -124,6 +152,11 @@ class MemoryLedger:
         self._seq += 1
         self._state.apply(self._seq, kind, body)
         return self._seq
+
+    def transact(self, fn, ts: int):
+        """fn(state) → (entries, result): decide and write as one step. Returns (seqs, result)."""
+        entries, result = fn(self._state)
+        return [self.append(k, b, ts) for k, b in entries], result
 _SCHEMA = ("CREATE TABLE IF NOT EXISTS entries (seq INTEGER PRIMARY KEY, ts INTEGER NOT NULL, "
            "kind TEXT NOT NULL, body TEXT NOT NULL, prev TEXT NOT NULL, hash TEXT NOT NULL)")
 
@@ -150,6 +183,28 @@ class Journal:
         """Append IFF the journal state allows it — state replay, guard and write in ONE write transaction,
         so concurrent broker processes cannot both pass (approval, intent, resolve). Raises Conflict."""
         return self._write(kind, body, ts, guarded=True)
+
+    def transact(self, fn, ts: int):
+        """fn(state) → ([(kind, body), …], result): DECIDE on the replayed state and WRITE the decision in one
+        write transaction — the state `fn` saw is the state the entries are appended to, whichever other
+        broker process runs meanwhile. Returns (seqs, result)."""
+        self._db.execute("BEGIN IMMEDIATE")
+        try:
+            entries, result = fn(self.state())
+            seqs = [self._insert(k, b, ts) for k, b in entries]
+            self._db.execute("COMMIT")
+        except BaseException:
+            self._db.execute("ROLLBACK")
+            raise
+        return seqs, result
+
+    def _insert(self, kind: str, body: dict, ts: int) -> int:
+        text = json.dumps(body, sort_keys=True, separators=(",", ":"))
+        row = self._db.execute("SELECT seq, hash FROM entries ORDER BY seq DESC LIMIT 1").fetchone()
+        seq, prev = (row[0] + 1, row[1]) if row else (1, GENESIS)
+        self._db.execute("INSERT INTO entries VALUES (?,?,?,?,?,?)",
+                         (seq, int(ts), kind, text, prev, entry_hash(prev, seq, int(ts), kind, text)))
+        return seq
 
     def _write(self, kind: str, body: dict, ts: int, guarded: bool) -> int:
         self._db.execute("BEGIN IMMEDIATE")                # one writer: state/seq/prev are read under the lock

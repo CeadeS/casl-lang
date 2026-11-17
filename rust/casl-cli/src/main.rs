@@ -60,6 +60,8 @@ fn dispatch(args: &[String]) -> i32 {
         "act" => act::cmd_act(rest),
         "resolve" => act::cmd_resolve(rest),
         "journal" => act::cmd_journal(rest),
+        "grant" => act::cmd_grant(rest),
+        "access" => act::cmd_access(rest),
         // Engines not yet ported to Rust — defer to the Python `casl` rather than pretend.
         "new" | "synth" | "ide" | "gate" | "trace" | "blame" | "observe" | "init" => deferred(cmd),
         other => {
@@ -91,6 +93,14 @@ host interface — one approved action through the broker (JSON on stdout; docs/
           [--auth-env VAR (--account ID | --account-from-token)]   broker-held credential + its identity
   resolve --journal J --attempt N --outcome performed|not_performed    clarify an unknown outcome
   journal verify J                               check the run journal            (0 intact / 1 broken)
+
+context access — scoped search / read / disclosure under signed grants (docs/context-grants.md):
+  grant add    --journal J --approvers K --grant G.json     record a grant            (0 / 1 refused)
+  grant revoke --journal J --id ID                          revoke a grant or frame
+  access --program F --site L --request R --journal J --approvers K --allow-hosts H [--instance I]
+         [--auth-env VAR (--account ID | --account-from-token)] [--origins 12,15=/path]
+         [--host-performed --account A --source S --resource P | --receiver X]
+                                                 (0 granted / 1 denied / 3 not performed / 4 needs a grant)
 
 deferred to the Python `casl` (engines not yet ported to Rust):
   new · synth · ide · gate · trace · blame · observe · init

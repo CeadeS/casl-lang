@@ -38,6 +38,13 @@ const VALFLAGS: &[&str] = &[
     "--attempt",
     "--outcome",
     "--note",
+    "--grant",
+    "--id",
+    "--instance",
+    "--origins",
+    "--source",
+    "--resource",
+    "--receiver",
 ];
 
 /// What the program says about an effect site.
@@ -110,6 +117,8 @@ struct Loaded {
     hash: String,
     site_name: String,
     site: Site,
+    /// cap → the context scope the program declares for it (docs/context-grants.md).
+    contexts: BTreeMap<String, Value>,
 }
 
 /// Read + parse + CHECK the program (it must be accepted) and locate the site. `Err` = (exit code, message).
@@ -130,10 +139,17 @@ fn load(a: &Args) -> Result<Loaded, (i32, String)> {
         }
     }
     let site = find_site(&p, label).map_err(|e| (1, e))?;
+    let contexts = p
+        .caps
+        .values()
+        .flatten()
+        .filter_map(|c| casl_broker::context::declared(&p, &c.tool).map(|d| (c.tool.clone(), d)))
+        .collect();
     Ok(Loaded {
         hash: format!("sha256:{}", journal::sha256_hex(src.as_bytes())),
         site_name: format!("{}:{}", p.name, label),
         site,
+        contexts,
     })
 }
 
@@ -275,6 +291,14 @@ fn act(a: &Args) -> Result<(i32, Value), (i32, String)> {
         ));
     }
     let cap = l.site.cap.clone();
+    if l.contexts.contains_key(&cap) {
+        return Err((
+            1,
+            format!(
+                "capability {cap:?} has a context scope — it is performed through `casl access`"
+            ),
+        ));
+    }
     let mut b = Broker::new(None, BTreeSet::from([cap.clone()]));
     if l.site.irreversible {
         // An irreversible action needs: a trust store, a signed approval, and a journal.
@@ -424,4 +448,185 @@ pub fn cmd_journal(args: &[String]) -> i32 {
             2
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------------------
+// context access (docs/context-grants.md): `casl grant add|revoke`, `casl access`
+// ---------------------------------------------------------------------------------------------------
+
+fn trust_store(a: &Args) -> Result<BTreeMap<String, String>, (i32, String)> {
+    let ap = a
+        .val("approvers")
+        .ok_or((2, "--approvers FILE is required".to_string()))?;
+    let text = fs::read_to_string(ap).map_err(|_| (2, format!("cannot read {ap}")))?;
+    let approvers = approval::parse_approvers(&text);
+    if approvers.is_empty() {
+        return Err((
+            2,
+            format!("{ap}: no valid `<pubkey-hex>=<human|personal>` entry"),
+        ));
+    }
+    Ok(approvers)
+}
+
+/// `casl grant add --journal J --approvers K --grant G.json` · `casl grant revoke --journal J --id ID`
+/// Exit: 0 recorded (or already on record) · 1 refused · 2 usage / IO.
+pub fn cmd_grant(args: &[String]) -> i32 {
+    let a = Args::parse(args.get(1..).unwrap_or(&[]), VALFLAGS);
+    let run = || -> Result<(i32, Value), (i32, String)> {
+        let jp = a
+            .val("journal")
+            .ok_or((2, "--journal PATH is required".to_string()))?;
+        match args.first().map(String::as_str) {
+            Some("add") => {
+                let env = read_json(
+                    a.val("grant")
+                        .ok_or((2, "--grant FILE is required".to_string()))?,
+                )?;
+                let b = Broker::new(None, BTreeSet::new()).with_approvers(
+                    trust_store(&a)?,
+                    None,
+                    BTreeMap::new(),
+                );
+                let mut b = open_journal(b, jp)?;
+                let r = b.grant_add(Some(&env)).map_err(|e| (2, e))?;
+                let ok = r["added"] == true || r["code"] == "exists";
+                Ok((i32::from(!ok), r))
+            }
+            Some("revoke") => {
+                let id = a.val("id").ok_or((2, "--id ID is required".to_string()))?;
+                if !std::path::Path::new(jp).is_file() {
+                    return Err((2, format!("no journal at {jp}")));
+                }
+                let mut b = open_journal(Broker::new(None, BTreeSet::new()), jp)?;
+                Ok((0, b.grant_revoke(Some(id)).map_err(|e| (2, e))?))
+            }
+            _ => Err((
+                2,
+                "usage: casl grant add --journal J --approvers K --grant G.json | casl grant revoke --journal J --id ID".into(),
+            )),
+        }
+    };
+    match run() {
+        Ok((code, out)) => {
+            println!("{out}");
+            code
+        }
+        Err((c, m)) => fail(c, m),
+    }
+}
+
+/// `"12,15=/path"` → `[{"access":12},{"access":15,"resource":"/path"}]`: the earlier accesses a disclosure
+/// cites; a search hit names its own resource.
+fn parse_origins(text: &str) -> Result<Value, (i32, String)> {
+    let mut out = Vec::new();
+    for part in text.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+        let (id, res) = match part.split_once('=') {
+            Some((i, r)) => (i, Some(r)),
+            None => (part, None),
+        };
+        let id: i64 = id
+            .parse()
+            .map_err(|_| (2, format!("--origins: {id:?} is not an access id")))?;
+        out.push(match res {
+            Some(r) => json!({"access": id, "resource": r}),
+            None => json!({"access": id}),
+        });
+    }
+    Ok(json!(out))
+}
+
+/// `casl access` — ONE context access (search, read or disclose) through the broker.
+/// Exit: 0 granted (and performed, when the broker sends it) · 1 denied · 2 usage / IO ·
+/// 3 granted but not performed (target outcome) · 4 needs a grant.
+pub fn cmd_access(args: &[String]) -> i32 {
+    let a = Args::parse(args, VALFLAGS);
+    match access(&a) {
+        Ok((code, out)) => {
+            println!("{out}");
+            code
+        }
+        Err((c, m)) => fail(c, m),
+    }
+}
+
+fn access(a: &Args) -> Result<(i32, Value), (i32, String)> {
+    let l = load(a)?;
+    let cap = l.site.cap.clone();
+    if !l.contexts.contains_key(&cap) {
+        return Err((
+            1,
+            format!("capability {cap:?} declares no context scope — `casl access` performs context capabilities only"),
+        ));
+    }
+    let jp = a
+        .val("journal")
+        .ok_or((2, "--journal PATH is required".to_string()))?;
+    let mut b = Broker::new(None, BTreeSet::from([cap.clone()])).with_approvers(
+        trust_store(a)?,
+        Some(l.hash.clone()),
+        BTreeMap::new(),
+    );
+    b.contexts = l.contexts.clone();
+    let mut params = json!({"site": l.site_name, "tool": cap, "instance": a.val("instance")});
+    if let Some(o) = a.val("origins") {
+        params["origins"] = parse_origins(o)?;
+    }
+    if a.has("host-performed") {
+        // the host performs the access itself (local index, IMAP, a loopback model); CASL decides and records
+        let mut hp = serde_json::Map::new();
+        for k in ["account", "source", "resource", "receiver"] {
+            if let Some(v) = a.val(k) {
+                hp.insert(k.to_string(), json!(v));
+            }
+        }
+        params["host_performed"] = Value::Object(hp);
+    } else {
+        params["request"] = read_json(
+            a.val("request")
+                .ok_or((2, "--request FILE is required".to_string()))?,
+        )?;
+        let hosts: Vec<String> = a
+            .val("allow-hosts")
+            .unwrap_or("")
+            .split(',')
+            .map(|h| h.trim().to_string())
+            .filter(|h| !h.is_empty())
+            .collect();
+        if hosts.is_empty() {
+            return Err((
+                2,
+                "--allow-hosts HOST[,HOST] is required (the destination allowlist)".into(),
+            ));
+        }
+        let (inject, account) = credential(a)?;
+        let transport: Box<dyn egress::EgressTransport> = match a.val("mock-egress") {
+            Some(m) => Box::new(egress::MockEgress::from_spec(m)),
+            None => Box::new(live::LiveTransport::new()),
+        };
+        b.mediated.insert(
+            cap.clone(),
+            egress::Mediated {
+                allow_hosts: hosts,
+                transport,
+                inject,
+                account,
+            },
+        );
+    }
+    let mut b = open_journal(b, jp)?;
+    let internal = |e: String| (2, e);
+    rpc(&mut b, "initialize", json!({"client": "casl-access"})).map_err(internal)?;
+    let r = rpc(&mut b, "access", params).map_err(internal)?;
+    let (code, status) = match (r["decision"].as_str(), r["by"].as_str()) {
+        (Some("granted"), Some("host")) => (0, "granted".to_string()),
+        (Some("granted"), _) if r["performed"] == true => (0, "performed".to_string()),
+        (Some("granted"), _) => (3, r["outcome"].as_str().unwrap_or("unknown").to_string()),
+        (Some("needs_grant"), _) => (4, "needs_grant".to_string()),
+        _ => (1, "denied".to_string()),
+    };
+    Ok((
+        code,
+        json!({"program": l.hash, "site": l.site_name, "cap": cap, "status": status, "access": r}),
+    ))
 }

@@ -1258,6 +1258,46 @@
   },
   {
    "expect": {
+    "code": "unsupported",
+    "decision": "denied"
+   },
+   "grants": [
+    {
+     "key": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+     "payload": "{\"account\":\"msgraph:uni:martin\",\"exp\":1800003600,\"id\":\"g-search\",\"instance\":null,\"kind\":\"grant\",\"op\":\"search\",\"program\":\"sha256:seminar-review-v1\",\"resource\":\"/v1.0/me/mailFolders/seminar\",\"source\":\"graph.microsoft.com\",\"uses\":null,\"v\":1}",
+     "sig": "8ecdd1f70f987e61e3d22091e0eddd6fcb9dd694fcd489756288a63ec5ee14fe408490a28f3c9e219dd35af916c61f7dc8f0f362d0aff0ddc9e785eeaeb0cd0c"
+    },
+    {
+     "key": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+     "payload": "{\"account\":\"msgraph:uni:martin\",\"exp\":1800003600,\"id\":\"g-read\",\"instance\":null,\"kind\":\"grant\",\"op\":\"read\",\"program\":\"sha256:seminar-review-v1\",\"resource\":\"/v1.0/me/mailFolders/seminar\",\"source\":\"graph.microsoft.com\",\"uses\":null,\"v\":1}",
+     "sig": "f74310679a05fbc058fe735730b7ff87797c75bfb563accb5ee2b319137210a1157773d338dac0e0de5a33d902b2ef2f8c00b70ed375ea3af80fab3d84050c02"
+    },
+    {
+     "key": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+     "payload": "{\"account\":\"msgraph:uni:martin\",\"exp\":1800003600,\"id\":\"g-disclose\",\"instance\":null,\"kind\":\"grant\",\"op\":\"disclose\",\"program\":\"sha256:seminar-review-v1\",\"receiver\":\"endpoint:api.anthropic.com/v1/messages#claude-sonnet-5-5\",\"resource\":\"/v1.0/me/mailFolders/seminar\",\"source\":\"graph.microsoft.com\",\"uses\":null,\"v\":1}",
+     "sig": "2089f3e8645b6938fa48986d1ab778908cf1bc1f0b838fde06bff68d43d6d6f27ef989dcb78f3125b2d9a966947772b174f04555a804315af7658bfa1f28e108"
+    }
+   ],
+   "name": "disclosure_request_without_a_model",
+   "request": {
+    "cap": "review",
+    "instance": "run-1",
+    "op": "disclose",
+    "origins": [
+     {
+      "account": "msgraph:uni:martin",
+      "resource": "/v1.0/me/mailFolders/seminar/messages/m1/attachments/a1",
+      "source": "graph.microsoft.com"
+     }
+    ],
+    "program": "sha256:seminar-review-v1",
+    "receiver": "endpoint:api.anthropic.com/v1/messages"
+   },
+   "revoked": [],
+   "used": {}
+  },
+  {
+   "expect": {
     "code": "ok",
     "decision": "granted",
     "grants": [
@@ -1851,6 +1891,56 @@
     "llm",
     "llm",
     false
+   ],
+   [
+    "endpoint:openrouter.ai/api/v1/chat/completions#anthropic/claude-sonnet",
+    "endpoint:openrouter.ai/api/v1/chat/completions#anthropic/claude-sonnet",
+    true
+   ],
+   [
+    "endpoint:openrouter.ai/api/v1/chat/completions#anthropic/claude-sonnet",
+    "endpoint:openrouter.ai/api/v1/chat/completions#anthropic/claude-opus",
+    false
+   ],
+   [
+    "endpoint:llm.example.org:8443/v1/chat#m",
+    "endpoint:llm.example.org:8443/v1/chat#m",
+    true
+   ],
+   [
+    "endpoint:llm.example.org/v1/chat#m",
+    "endpoint:llm.example.org:8443/v1/chat#m",
+    false
+   ],
+   [
+    "endpoint:llm.example.org:8443/v1/chat#m",
+    "endpoint:llm.example.org/v1/chat#m",
+    false
+   ],
+   [
+    "endpoint:llm.example.org:443/v1/chat#m",
+    "endpoint:llm.example.org:443/v1/chat#m",
+    false
+   ],
+   [
+    "endpoint:llm.example.org:08443/v1/chat#m",
+    "endpoint:llm.example.org:08443/v1/chat#m",
+    false
+   ],
+   [
+    "endpoint:llm.example.org:99999/v1/chat#m",
+    "endpoint:llm.example.org:99999/v1/chat#m",
+    false
+   ],
+   [
+    "endpoint:llm.example.org/v1/chat#a//b",
+    "endpoint:llm.example.org/v1/chat#a//b",
+    false
+   ],
+   [
+    "endpoint:llm.example.org/v1/chat#/a",
+    "endpoint:llm.example.org/v1/chat#/a",
+    false
    ]
   ]
  },
@@ -2069,6 +2159,70 @@
     "sig": "6ab13653dff60cdd453f024197887e900a74acbe16041083f7b431a6786eda015cafdf4be3e886318153a405d1d593f57258121ca66f2da1983ed7b5cc5be500"
    },
    "name": "uses_zero",
+   "revoked": []
+  },
+  {
+   "expect": {
+    "ancestors": [],
+    "code": "malformed",
+    "frame": null,
+    "issuer": null,
+    "ok": false
+   },
+   "grant": {
+    "key": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+    "payload": "{\"account\":\"msgraph:uni:martin\",\"exp\":1800003600,\"id\":\"g1\",\"instance\":null,\"kind\":\"grant\",\"op\":\"disclose\",\"program\":\"sha256:seminar-review-v1\",\"receiver\":\"endpoint:api.anthropic.com/v1/messages\",\"resource\":\"/v1.0/me/mailFolders/seminar\",\"source\":\"graph.microsoft.com\",\"uses\":null,\"v\":1}",
+    "sig": "21d44ad390ed18b256b1d6b33e25207ef45e375f22fc3a96e4aff01f5d00bf93156a00a1036eaaf52cec221512bb32ab2faf4cd95a64a9c87cf2295c32b6c804"
+   },
+   "name": "disclose_grant_must_name_the_model",
+   "revoked": []
+  },
+  {
+   "expect": {
+    "ancestors": [],
+    "code": "ok",
+    "frame": null,
+    "issuer": "user",
+    "ok": true
+   },
+   "grant": {
+    "key": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+    "payload": "{\"account\":\"msgraph:uni:martin\",\"exp\":1800003600,\"id\":\"g1\",\"instance\":null,\"kind\":\"grant\",\"op\":\"disclose\",\"program\":\"sha256:seminar-review-v1\",\"receiver\":\"endpoint:openrouter.ai/api/v1/chat/completions#anthropic/claude-sonnet\",\"resource\":\"/v1.0/me/mailFolders/seminar\",\"source\":\"graph.microsoft.com\",\"uses\":null,\"v\":1}",
+    "sig": "61800c75efb37384ac2e1bf4fc6d5f92f9224aa304db6b3f186a29a0e85c960b176b7dc7c1d4dac4823783a29715af590f6819defbca7e2e781e4a78c3d9f206"
+   },
+   "name": "disclose_grant_vendor_slash_model",
+   "revoked": []
+  },
+  {
+   "expect": {
+    "ancestors": [],
+    "code": "ok",
+    "frame": null,
+    "issuer": "user",
+    "ok": true
+   },
+   "grant": {
+    "key": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+    "payload": "{\"account\":\"msgraph:uni:martin\",\"exp\":1800003600,\"id\":\"g1\",\"instance\":null,\"kind\":\"grant\",\"op\":\"disclose\",\"program\":\"sha256:seminar-review-v1\",\"receiver\":\"endpoint:llm.example.org:8443/v1/chat#m\",\"resource\":\"/v1.0/me/mailFolders/seminar\",\"source\":\"graph.microsoft.com\",\"uses\":null,\"v\":1}",
+    "sig": "9bb595b3b4dd8768dc4a6a70c783dbced96da1db98455b4876b30e3f87b1ddcce79d2fcc54a11f369281bc841d2b944c72ef147b12f55ade1b9da823bb1aba04"
+   },
+   "name": "disclose_grant_with_port",
+   "revoked": []
+  },
+  {
+   "expect": {
+    "ancestors": [],
+    "code": "ok",
+    "frame": null,
+    "issuer": "user",
+    "ok": true
+   },
+   "grant": {
+    "key": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+    "payload": "{\"account\":\"msgraph:uni:martin\",\"exp\":1800003600,\"id\":\"g1\",\"instance\":null,\"kind\":\"grant\",\"op\":\"disclose\",\"program\":\"sha256:seminar-review-v1\",\"receiver\":\"workflow:Grader\",\"resource\":\"/v1.0/me/mailFolders/seminar\",\"source\":\"graph.microsoft.com\",\"uses\":null,\"v\":1}",
+    "sig": "1969e49f0894c26214b09ce83383247bd3abe04c4a6bc3a237d6f1979f4f3ac56ce0fa02a405cebc3b8519365bf47078cd02889ebf6cf222e1b94d99a1f66d08"
+   },
+   "name": "disclose_grant_to_a_workflow",
    "revoked": []
   },
   {

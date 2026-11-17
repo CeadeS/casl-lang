@@ -45,7 +45,15 @@ the record). Both brokers, pinned by shared corpora (`tests/test_approval_signed
   inside a user-signed frame, or derived from a parent grant), containment, intersection for delegation,
   and the typed decision `granted | needs_grant | denied`. One corpus of 43 decisions, 39 verifications,
   9 intersections and 16 rejected programs drives both implementations. Example
-  `examples/os_pilot/seminar_review.casl`. No runtime enforcement yet (casl-lang#7).
+  `examples/os_pilot/seminar_review.casl`.
+- **Context grants, enforced** (casl-lang#7): `casl grant add|revoke`, `casl access`; broker methods
+  `grant`, `revoke`, `access`. Each access is resolved from trusted inputs (actual URL, broker-held
+  credential identity, the `model` field of the body, the journal of cited accesses), decided and
+  recorded in one journal transaction, and only then sent. `needs_grant` is recorded once with a stable
+  request id. Search hits can be cited as origins, bound to account and resource. A host-performed access
+  (`--host-performed`) is decided and recorded, not gated. Context capabilities are refused by `act` and
+  `effect`. Receivers carry the port; model ids may contain `/`; grants and requests must name the model.
+  Example `examples/os_pilot/mail_digest.casl`.
 - **Host interface** (`casl prepare | act | resolve | journal verify`, Rust CLI): one approved action through
   the broker, JSON out. Template `examples/os_pilot/create_task.casl`; walkthrough `docs/os-pilot.md`;
   end-to-end acceptance `tests/test_os_pilot_act.py`.

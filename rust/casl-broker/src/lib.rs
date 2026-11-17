@@ -134,6 +134,18 @@ impl Ledger {
             Ledger::Durable(j) => j.append(kind, body, ts),
         }
     }
+
+    /// Decide on the current state and write the decision as one step.
+    fn transact<R>(
+        &mut self,
+        ts: i64,
+        f: impl FnOnce(&journal::State) -> Result<(Vec<(String, serde_json::Value)>, R), String>,
+    ) -> Result<(Vec<i64>, R), String> {
+        match self {
+            Ledger::Memory(m) => m.transact(f),
+            Ledger::Durable(j) => j.transact(ts, f),
+        }
+    }
 }
 
 /// What a valid consent token is bound to: (request digest, approval nonce, target account).
@@ -169,6 +181,9 @@ pub struct Broker {
     pub fixed_now: Option<i64>,
     /// Capabilities the broker PERFORMS (mediated egress): cap → destination allowlist + transport.
     pub mediated: BTreeMap<String, egress::Mediated>,
+    /// Context access (docs/context-grants.md): cap → the data scope the checked program DECLARES for it.
+    /// A capability listed here is performed only through `access` (grant-checked), never through `effect`.
+    pub contexts: BTreeMap<String, serde_json::Value>,
     /// The ledger of approvals and attempts: the run journal (durable, shared by concurrent broker
     /// processes) or, without one, the same state in memory for this process only.
     ledger: Ledger,
@@ -189,6 +204,7 @@ impl Broker {
             approval_class: BTreeMap::new(),
             fixed_now: None,
             mediated: BTreeMap::new(),
+            contexts: BTreeMap::new(),
             ledger: Ledger::Memory(journal::MemoryLedger::default()),
             declared_caps: BTreeSet::new(),
             consents: HashMap::new(),
@@ -320,6 +336,14 @@ impl Broker {
         if !self.granted_tools.contains(&tool) {
             return Ok(deny(
                 format!("capability {tool:?} not granted for site {site} (deny-by-default)"),
+                None,
+            ));
+        }
+        if self.contexts.contains_key(&tool) {
+            // a context capability reads or discloses protected data: it runs only through `access`,
+            // where the grant is checked — never through the plain effect path
+            return Ok(deny(
+                format!("capability {tool:?} has a context scope — it is performed through `access` only"),
                 None,
             ));
         }
@@ -525,6 +549,9 @@ impl Broker {
                         "effect".into(),
                         "consent".into(),
                         "resolve".into(),
+                        "access".into(),
+                        "grant".into(),
+                        "revoke".into(),
                     ],
                 };
                 Response::ok(id, serde_json::to_value(r).unwrap())
@@ -575,6 +602,22 @@ impl Broker {
                 };
                 match self.effect(p) {
                     Ok(res) => Response::ok(id, serde_json::to_value(res).unwrap()),
+                    Err(e) => Response::err(id, codes::INTERNAL, e),
+                }
+            }
+            "access" | "grant" | "revoke" => {
+                if !self.initialized {
+                    return Response::err(id, codes::NOT_INITIALIZED, "broker not initialized");
+                }
+                let r = match req.method.as_str() {
+                    "access" => self.access(&req.params),
+                    "grant" => self.grant_add(req.params.get("grant")),
+                    _ => {
+                        self.grant_revoke(req.params.get("id").and_then(serde_json::Value::as_str))
+                    }
+                };
+                match r {
+                    Ok(v) => Response::ok(id, v),
                     Err(e) => Response::err(id, codes::INTERNAL, e),
                 }
             }
@@ -756,6 +799,425 @@ impl Broker {
                 format!("method not found: {other:?}"),
             ),
         }
+    }
+}
+
+/// What the decision step of an access hands back: (decision, request id, the access record, the seq of an
+/// already-pending record).
+type AccessStep = (serde_json::Value, String, serde_json::Value, Option<i64>);
+
+/// A denial found while resolving the request inside the decision step.
+fn access_no(
+    body: &serde_json::Value,
+    q: &serde_json::Value,
+    code: &str,
+    reason: &str,
+) -> (Vec<(String, serde_json::Value)>, AccessStep) {
+    let mut keyed = q.clone();
+    keyed["code"] = json!(code);
+    let rid = context::request_id(&keyed);
+    let mut full = body.clone();
+    full["request"] = json!(rid);
+    full["decision"] = json!("denied");
+    full["code"] = json!(code);
+    (
+        vec![("access".to_string(), full.clone())],
+        (
+            json!({"decision": "denied", "code": code, "reason": reason}),
+            rid,
+            full,
+            None,
+        ),
+    )
+}
+
+// -- context access (docs/context-grants.md; casl-lang#7) — mirrors `Broker._access` of the reference ------
+impl Broker {
+    /// Record a context grant. Only a grant that verifies — a user key, a policy key inside its frame, or
+    /// a derivation inside its parent — is recorded; the declaration in the program never is one.
+    pub fn grant_add(
+        &mut self,
+        env: Option<&serde_json::Value>,
+    ) -> Result<serde_json::Value, String> {
+        let revoked = self.ledger.state()?.revoked;
+        let v = match context::verify_grant(env, &self.approvers, &revoked, "human") {
+            Ok(v) => v,
+            Err(code) => return Ok(json!({"added": false, "code": code})),
+        };
+        let id = v.grant["id"].clone();
+        let now = self.now();
+        match self
+            .ledger
+            .reserve("ctx_grant", json!({"id": id, "envelope": env}), now)
+        {
+            Ok(_) => Ok(json!({"added": true, "code": "ok", "id": id, "issuer": v.chain.issuer})),
+            Err(journal::ReserveError::Conflict(journal::Conflict::Exists)) => {
+                Ok(json!({"added": false, "code": "exists", "id": id}))
+            }
+            Err(journal::ReserveError::Conflict(_)) => {
+                Ok(json!({"added": false, "code": "duplicate_id", "id": id}))
+            }
+            Err(journal::ReserveError::Io(e)) => Err(e),
+        }
+    }
+
+    /// Revoke a grant or a frame by id. Unsigned on purpose: revocation only removes authority. It takes
+    /// effect at the next access; an access already decided is in flight and completes.
+    pub fn grant_revoke(&mut self, id: Option<&str>) -> Result<serde_json::Value, String> {
+        let Some(id) = id.filter(|i| !i.is_empty()) else {
+            return Ok(json!({"revoked": false, "reason": "id must be a grant or frame id"}));
+        };
+        if !self.ledger.state()?.revoked.contains(id) {
+            self.log("revoke", json!({"id": id}))?;
+        }
+        Ok(json!({"revoked": true, "id": id}))
+    }
+
+    fn access_early(
+        &mut self,
+        base: &serde_json::Value,
+        op: Option<&str>,
+        code: &str,
+        reason: String,
+    ) -> Result<serde_json::Value, String> {
+        let mut keyed = base.clone();
+        keyed["code"] = json!(code);
+        let rid = context::request_id(&keyed);
+        let mut body = base.clone();
+        body["request"] = json!(rid);
+        body["decision"] = json!("denied");
+        body["code"] = json!(code);
+        body["op"] = json!(op);
+        self.log("access", body)?;
+        Ok(json!({"decision": "denied", "code": code, "reason": reason, "request": rid}))
+    }
+
+    /// ONE context access — search, read or disclose — decided against the current grants and, if the
+    /// broker performs it, sent. The request is RESOLVED here from trusted inputs (the actual URL, the
+    /// credential the broker holds, the journal of earlier accesses), not taken from the caller's claims.
+    /// Decision and record are one journal transaction; only a granted access is sent.
+    pub fn access(&mut self, params: &serde_json::Value) -> Result<serde_json::Value, String> {
+        use serde_json::Value;
+        let site = params
+            .get("site")
+            .and_then(Value::as_str)
+            .unwrap_or("?")
+            .to_string();
+        let cap = params
+            .get("tool")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        let instance = match params.get("instance").and_then(Value::as_str) {
+            Some(i) if !i.is_empty() => json!(i),
+            _ => Value::Null,
+        };
+        let decl = self.contexts.get(&cap).cloned();
+        let hp = params
+            .get("host_performed")
+            .filter(|v| !v.is_null())
+            .cloned();
+        let by = if hp.is_some() { "host" } else { "broker" };
+        let base = json!({"program": self.program_hash, "instance": instance, "site": site, "cap": cap, "by": by});
+        let Some(decl) = decl else {
+            return self.access_early(
+                &base,
+                None,
+                "undeclared",
+                format!("the program declares no context scope for {cap:?}"),
+            );
+        };
+        let op = decl["op"].as_str().unwrap_or("").to_string();
+        let Some(program) = self.program_hash.clone().filter(|p| !p.is_empty()) else {
+            return self.access_early(
+                &base,
+                Some(&op),
+                "unsupported",
+                "the broker has no program identity".into(),
+            );
+        };
+        let mut q = json!({"program": program, "instance": instance, "cap": cap, "op": op});
+        let mut spec: Option<egress::RequestSpec> = None;
+        if let Some(hp) = &hp {
+            // the HOST performs this access (a local index, IMAP, a loopback model): the broker decides
+            // and records, the host states where it goes. Attested, not enforced (`by: host`).
+            if !hp.is_object() {
+                return self.access_early(
+                    &base,
+                    Some(&op),
+                    "unsupported",
+                    "host_performed must describe the access".into(),
+                );
+            }
+            if op == "disclose" {
+                q["receiver"] = hp.get("receiver").cloned().unwrap_or(Value::Null);
+            } else {
+                for k in ["account", "source", "resource"] {
+                    q[k] = hp.get(k).cloned().unwrap_or(Value::Null);
+                }
+            }
+        } else {
+            let early: Option<(&str, String)> = match self.mediated.get(&cap) {
+                None => Some((
+                    "unsupported",
+                    format!("the broker performs nothing for {cap:?} (no transport)"),
+                )),
+                Some(m) => match egress::RequestSpec::from_obj(params.get("request")) {
+                    None => Some(("unsupported", "request is not an object".into())),
+                    Some(s) => {
+                        let r = if let Err(r) = egress::check_destination(&s.url, &m.allow_hosts) {
+                            Some(("destination_denied", format!("destination denied: {r}")))
+                        } else if let Some(h) = m.conflicting_header(&s) {
+                            Some((
+                                "unsupported",
+                                format!("header {h:?} is held by the broker and must not be supplied by the caller"),
+                            ))
+                        } else {
+                            match egress::split_url(&s.url) {
+                                None => Some((
+                                    "unsupported",
+                                    "the url is not of the strict https form".into(),
+                                )),
+                                Some((host, port, path)) => {
+                                    if op == "disclose" {
+                                        let model = serde_json::from_str::<Value>(&s.body)
+                                            .ok()
+                                            .and_then(|b| {
+                                                b.get("model")
+                                                    .and_then(Value::as_str)
+                                                    .map(str::to_string)
+                                            })
+                                            .filter(|m| casl_surface::context::valid_model(m));
+                                        match model {
+                                            None => Some((
+                                                "unsupported",
+                                                "a disclosure must name its model in the JSON body field `model`".into(),
+                                            )),
+                                            Some(model) => {
+                                                let port = port.map(|p| format!(":{p}")).unwrap_or_default();
+                                                q["receiver"] = json!(format!("endpoint:{host}{port}{path}#{model}"));
+                                                None
+                                            }
+                                        }
+                                    } else if port.is_some() {
+                                        Some((
+                                            "unsupported",
+                                            "a source on a non-default port is not supported"
+                                                .into(),
+                                        ))
+                                    } else {
+                                        q["account"] = json!(m.account);
+                                        q["source"] = json!(host);
+                                        q["resource"] = json!(path);
+                                        None
+                                    }
+                                }
+                            }
+                        };
+                        spec = Some(s);
+                        r
+                    }
+                },
+            };
+            if let Some((code, reason)) = early {
+                return self.access_early(&base, Some(&op), code, reason);
+            }
+        }
+        let refs = params.get("origins").cloned();
+        let now = self.now();
+        let approvers = &self.approvers;
+        let (decl_ref, base_ref, op_ref, cap_ref) = (&decl, &base, op.as_str(), cap.as_str());
+        let step = |state: &journal::State| -> Result<(Vec<(String, Value)>, AccessStep), String> {
+            let mut q = q;
+            let mut body = base_ref.clone();
+            body["op"] = json!(op_ref);
+            let mut cited: Vec<Value> = Vec::new();
+            if op_ref == "disclose" {
+                // ORIGINS: where the disclosed content came from — earlier GRANTED search/read accesses
+                // of this run, cited by their journal id. Account, source and resource scope come from
+                // the journal entry; a search hit names its own resource, inside what was searched.
+                let allowed: Vec<&str> = decl_ref["from"]
+                    .as_array()
+                    .map(|f| f.iter().filter_map(|x| x["cap"].as_str()).collect())
+                    .unwrap_or_default();
+                let Some(refs) = refs
+                    .as_ref()
+                    .and_then(Value::as_array)
+                    .filter(|r| !r.is_empty())
+                else {
+                    return Ok(access_no(
+                        &body,
+                        &q,
+                        "unsupported",
+                        "a disclosure must cite its origins",
+                    ));
+                };
+                let mut units: Vec<Value> = Vec::new();
+                for r in refs {
+                    let acc = r
+                        .get("access")
+                        .filter(|a| a.is_i64())
+                        .and_then(Value::as_i64)
+                        .and_then(|a| state.accesses.get(&a));
+                    let Some(acc) = acc.filter(|a| {
+                        matches!(a["op"].as_str(), Some("search") | Some("read"))
+                            && a["program"].as_str() == q["program"].as_str()
+                            && a.get("instance").unwrap_or(&Value::Null) == &q["instance"]
+                    }) else {
+                        return Ok(access_no(
+                            &body,
+                            &q,
+                            "origin_invalid",
+                            "an origin is not a granted search/read of this run",
+                        ));
+                    };
+                    if !acc["cap"].as_str().is_some_and(|c| allowed.contains(&c)) {
+                        return Ok(access_no(
+                            &body,
+                            &q,
+                            "outside_declared_scope",
+                            &format!(
+                                "content of {} may not be disclosed by {cap_ref:?}",
+                                acc["cap"]
+                            ),
+                        ));
+                    }
+                    let res = match r.get("resource") {
+                        Some(x) => x.as_str(),
+                        None if acc["op"] == "read" => acc["resource"].as_str(),
+                        None => None,
+                    };
+                    let Some(res) = res.filter(|res| {
+                        casl_surface::context::path_covers(
+                            acc["resource"].as_str().unwrap_or(""),
+                            res,
+                        )
+                    }) else {
+                        return Ok(access_no(
+                            &body,
+                            &q,
+                            "origin_invalid",
+                            "a search hit must name its resource, inside the searched scope",
+                        ));
+                    };
+                    units.push(json!({"account": acc["account"], "source": acc["source"], "resource": res}));
+                    cited.push(json!({"access": r["access"], "account": acc["account"], "source": acc["source"], "resource": res}));
+                }
+                q["origins"] = json!(units);
+            }
+            let grants: Vec<context::Verified> = state
+                .grants
+                .values()
+                .filter_map(|e| {
+                    context::verify_grant(Some(e), approvers, &BTreeSet::new(), "human").ok()
+                })
+                .collect();
+            let d = context::decide(
+                Some(decl_ref),
+                &q,
+                &grants,
+                now,
+                &state.revoked,
+                &state.used,
+            );
+            let rid = context::request_id(&q);
+            body["request"] = json!(rid);
+            body["decision"] = d["decision"].clone();
+            body["code"] = d["code"].clone();
+            for k in ["account", "source", "resource", "receiver"] {
+                if let Some(v) = q.get(k) {
+                    body[k] = v.clone();
+                }
+            }
+            if op_ref == "disclose" {
+                body["origins"] = json!(cited);
+            }
+            match d["decision"].as_str() {
+                Some("granted") => {
+                    let mut counted: Vec<String> = Vec::new();
+                    for gid in d["grants"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(Value::as_str)
+                    {
+                        counted.push(gid.to_string());
+                        if let Some(v) = grants.iter().find(|v| v.grant["id"].as_str() == Some(gid))
+                        {
+                            counted.extend(v.chain.ancestors.iter().map(|(i, _)| i.clone()));
+                        }
+                    }
+                    body["grants"] = d["grants"].clone();
+                    body["counted"] = json!(counted);
+                }
+                Some("needs_grant") => {
+                    body["missing"] = d["missing"].clone();
+                    if let Some(waiting) =
+                        state.pending.get(&rid).filter(|w| w["code"] == d["code"])
+                    {
+                        // the same ask again: one pending record
+                        let seq = waiting["seq"].as_i64();
+                        return Ok((Vec::new(), (d, rid, waiting.clone(), seq)));
+                    }
+                }
+                _ => {}
+            }
+            Ok((
+                vec![("access".to_string(), body.clone())],
+                (d, rid, body, None),
+            ))
+        };
+        let (seqs, (d, rid, body, pending_seq)) = self.ledger.transact(now, step)?;
+        let seq = seqs.first().copied().or(pending_seq);
+        let mut out = json!({"decision": d["decision"], "code": d["code"], "request": rid, "access": seq, "by": by});
+        if let Some(reason) = d.get("reason") {
+            out["reason"] = reason.clone();
+        }
+        if d["decision"] == "needs_grant" {
+            // what the host needs to ask for authorization, and to correlate the answer after a restart
+            out["missing"] = d["missing"].clone();
+            let mut pending = serde_json::Map::new();
+            for k in [
+                "request", "program", "instance", "site", "cap", "op", "account", "source",
+                "resource", "receiver", "origins",
+            ] {
+                if let Some(v) = body.get(k).filter(|v| !v.is_null()) {
+                    pending.insert(k.to_string(), v.clone());
+                }
+            }
+            out["pending"] = Value::Object(pending);
+        }
+        if d["decision"] != "granted" {
+            return Ok(out);
+        }
+        out["grants"] = d["grants"].clone();
+        let Some(spec) = spec else {
+            return Ok(out); // host-performed: decided and recorded, nothing sent
+        };
+        let sent = match self.mediated.get_mut(&cap) {
+            Some(m) => {
+                let mut wire = spec.clone(); // broker-held credentials are added on the wire only
+                wire.headers.extend(m.inject.iter().cloned());
+                m.transport.send(&wire)
+            }
+            None => Err(egress::TransportFailure::NotSent),
+        };
+        let (outcome, status, text) = match sent {
+            Ok(r) => (egress::classify(r.status), Some(r.status), Some(r.body)),
+            Err(f) => (f.outcome(), None, None),
+        };
+        self.log(
+            "access_result",
+            json!({"access": seq, "outcome": outcome, "status": status,
+                   "body_sha256": text.as_ref().map(|b| journal::sha256_hex(b.as_bytes()))}),
+        )?;
+        out["outcome"] = json!(outcome);
+        out["performed"] = json!(outcome == "performed");
+        if let Some(st) = status {
+            out["status"] = json!(st);
+            out["body"] = json!(text);
+        }
+        Ok(out)
     }
 }
 

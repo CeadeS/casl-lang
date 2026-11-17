@@ -28,7 +28,7 @@ from casl import core
 from casl import oracle as _oracle
 
 PROTOCOL_VERSION = "0.1"
-SERVER_CAPABILITIES = ("oracle", "effect", "consent", "resolve")   # the methods this broker offers
+SERVER_CAPABILITIES = ("oracle", "effect", "consent", "resolve", "access", "grant", "revoke")   # the methods this broker offers
 
 
 class _BrokerError(Exception):
@@ -63,6 +63,9 @@ class Broker:
     # replay protection and the "unknown outcome" state survive a restart and hold across concurrent broker
     # processes; without one an in-memory ledger gives the same decisions for this process only.
     journal: Any = None
+    # CONTEXT ACCESS (docs/context-grants.md): cap -> the data scope the checked program DECLARES for it.
+    # A capability listed here is performed only through `access` (grant-checked), never through `effect`.
+    contexts: Dict[str, dict] = field(default_factory=dict)
     _ledger: Any = None
     _initialized: bool = False
 
@@ -95,6 +98,12 @@ class Broker:
                 result = self._consent(params)
             elif method == "resolve":
                 result = self._resolve(params)
+            elif method == "access":
+                result = self._access(params)
+            elif method == "grant":
+                result = self._grant(params)
+            elif method == "revoke":
+                result = self._revoke(params)
             elif method == "shutdown":
                 result = {"ok": True}
             else:
@@ -147,6 +156,11 @@ class Broker:
         if tool not in self.granted_tools:               # deny-by-default (fail-safe)
             return {"allowed": False, "tool": tool, "site": site,
                     "reason": f"capability {tool!r} not granted for site {site} (deny-by-default)"}
+        if tool in self.contexts:
+            # a context capability reads or discloses protected data: it runs only through `access`, where
+            # the grant is checked — never through the plain effect path (no bypass of the workflow step)
+            return {"allowed": False, "tool": tool, "site": site,
+                    "reason": f"capability {tool!r} has a context scope — it is performed through `access` only"}
         # (b) MEDIATED egress: for a capability the broker PERFORMS, the destination policy runs FIRST —
         # before consent is consumed and before any connect (SSRF gate; a denied destination burns no token).
         irreversible = tool in self.irreversible_caps
@@ -266,6 +280,192 @@ class Broker:
         if body["account"] is not None:
             out["account"] = body["account"]
         return out
+
+    # -- context access (docs/context-grants.md; casl-lang#7) ---------------------------------------------
+    def _verified_grants(self, state) -> list:
+        """The grants on record, re-verified against the CURRENT trust store: (payload, chain) pairs.
+        Revocation is applied by `decide`, so a revoked grant reads as revoked, not as absent."""
+        from casl import context as _cx
+        out = []
+        for env in state.grants.values():
+            ok, _code, g, chain = _cx.verify_grant(env, approvers=self.approvers)
+            if ok:
+                out.append((g, chain))
+        return out
+
+    def _grant(self, params: dict) -> dict:
+        """Record a context grant. Only a grant that verifies — a user key, a policy key inside its frame, or
+        a derivation inside its parent — is recorded; the declaration in the program never is one."""
+        if not self._initialized:
+            raise _BrokerError(-32002, "broker not initialized (call initialize first)")
+        from casl import context as _cx, journal as _j
+        env = params.get("grant")
+        ok, code, g, chain = _cx.verify_grant(env, approvers=self.approvers,
+                                              revoked=frozenset(self._ledger.state().revoked))
+        if not ok:
+            return {"added": False, "code": code}
+        try:
+            self._ledger.reserve("ctx_grant", {"id": g["id"], "envelope": env}, self._now())
+        except _j.Conflict as c:
+            return {"added": False, "code": c.code, "id": g["id"]}      # exists (same grant) | duplicate_id
+        return {"added": True, "code": "ok", "id": g["id"], "issuer": chain["issuer"]}
+
+    def _revoke(self, params: dict) -> dict:
+        """Revoke a grant or a frame by id. Unsigned on purpose: revocation only removes authority. It takes
+        effect at the next access; an access already decided is in flight and completes."""
+        if not self._initialized:
+            raise _BrokerError(-32002, "broker not initialized (call initialize first)")
+        gid = params.get("id")
+        if not (isinstance(gid, str) and gid):
+            return {"revoked": False, "reason": "id must be a grant or frame id"}
+        if gid not in self._ledger.state().revoked:
+            self._log("revoke", {"id": gid})
+        return {"revoked": True, "id": gid}
+
+    def _access(self, params: dict) -> dict:
+        """ONE context access — search, read or disclose — decided against the current grants and, if the
+        broker performs it, sent. The request is RESOLVED here from trusted inputs (the actual URL, the
+        credential the broker holds, the journal of earlier accesses), not taken from the caller's claims.
+        Decision and record are one journal transaction; only a granted access is sent."""
+        if not self._initialized:
+            raise _BrokerError(-32002, "broker not initialized (call initialize first)")
+        import hashlib
+        from casl import context as _cx, egress as _eg
+        site, cap = str(params.get("site", "?")), str(params.get("tool", ""))
+        instance = params.get("instance") if isinstance(params.get("instance"), str) and params.get("instance") else None
+        decl, mc, hp = self.contexts.get(cap), self.transports.get(cap), params.get("host_performed")
+        base = {"program": self.program_hash, "instance": instance, "site": site, "cap": cap,
+                "by": "host" if hp is not None else "broker"}
+
+        def early(code: str, reason: str) -> dict:
+            body = dict(base, request=_cx.request_id(dict(base, code=code)), decision="denied", code=code,
+                        op=decl["op"] if decl else None)
+            self._log("access", body)
+            return {"decision": "denied", "code": code, "reason": reason, "request": body["request"]}
+
+        if decl is None:
+            return early("undeclared", f"the program declares no context scope for {cap!r}")
+        if not self.program_hash:
+            return early("unsupported", "the broker has no program identity")
+        op, spec, q = decl["op"], None, dict(program=self.program_hash, instance=instance, cap=cap, op=decl["op"])
+        if hp is not None:
+            # the HOST performs this access (a local index, IMAP, a loopback model): the broker decides and
+            # records, the host states where it goes. Attested, not enforced — the grade says so (`by: host`).
+            if not isinstance(hp, dict):
+                return early("unsupported", "host_performed must describe the access")
+            if op == "disclose":
+                q["receiver"] = hp.get("receiver")
+            else:
+                q.update(account=hp.get("account"), source=hp.get("source"), resource=hp.get("resource"))
+        else:
+            if mc is None:
+                return early("unsupported", f"the broker performs nothing for {cap!r} (no transport)")
+            spec = _eg.RequestSpec.from_obj(params.get("request"))
+            ok, reason = mc.policy.check(spec.url)
+            if not ok:
+                return early("destination_denied", f"destination denied: {reason}")
+            held = mc.conflicting_header(spec)
+            if held is not None:
+                return early("unsupported", f"header {held!r} is held by the broker and must not be supplied by the caller")
+            parts = _eg.split_url(spec.url)
+            if parts is None:
+                return early("unsupported", "the url is not of the strict https form")
+            host, port, path = parts
+            if op == "disclose":
+                try:
+                    model = json.loads(spec.body).get("model")
+                except (ValueError, AttributeError):
+                    model = None
+                if not core.valid_model(model):
+                    return early("unsupported", "a disclosure must name its model in the JSON body field `model`")
+                q["receiver"] = f"endpoint:{host}{':' + port if port else ''}{path}#{model}"
+            else:
+                if port is not None:
+                    return early("unsupported", "a source on a non-default port is not supported")
+                q.update(account=mc.account, source=host, resource=path)
+        refs = params.get("origins") if op == "disclose" else None
+
+        def step(state):
+            body, cited = dict(base, op=op), []
+            if op == "disclose":
+                # ORIGINS: where the disclosed content came from — earlier GRANTED search/read accesses of
+                # this program, cited by their journal id. Account, source and resource scope come from the
+                # journal entry; a search hit names its own resource, which must lie inside what was searched.
+                units = []
+                allowed = [f["cap"] for f in decl["from"]]
+                if not (isinstance(refs, list) and refs):
+                    return self._no(body, q, "unsupported", "a disclosure must cite its origins")
+                for r in refs:
+                    acc = state.accesses.get(r.get("access")) if isinstance(r, dict) else None
+                    if (acc is None or acc.get("op") not in ("search", "read") or acc.get("program") != self.program_hash
+                            or acc.get("instance") != instance):
+                        return self._no(body, q, "origin_invalid", "an origin is not a granted search/read of this run")
+                    if acc.get("cap") not in allowed:
+                        return self._no(body, q, "outside_declared_scope",
+                                        f"content of {acc.get('cap')!r} may not be disclosed by {cap!r}")
+                    res = r.get("resource", acc["resource"] if acc["op"] == "read" else None)
+                    if not core.path_covers(acc["resource"], res):
+                        return self._no(body, q, "origin_invalid",
+                                        "a search hit must name its resource, inside the searched scope")
+                    units.append({"account": acc["account"], "source": acc["source"], "resource": res})
+                    cited.append({"access": r["access"], "account": acc["account"], "source": acc["source"], "resource": res})
+                q["origins"] = units
+            grants = self._verified_grants(state)
+            d = _cx.decide(decl, q, grants, now=self._now(), revoked=frozenset(state.revoked), used=state.used)
+            rid = _cx.request_id(q)
+            body.update(request=rid, decision=d["decision"], code=d["code"],
+                        **{k: q[k] for k in ("account", "source", "resource", "receiver") if k in q})
+            if op == "disclose":
+                body["origins"] = cited
+            if d["decision"] == "granted":
+                chains = {g["id"]: c for g, c in grants}
+                body["grants"] = d["grants"]
+                body["counted"] = [i for gid in d["grants"] for i in [gid] + [a["id"] for a in chains[gid]["ancestors"]]]
+            elif d["decision"] == "needs_grant":
+                body["missing"] = d["missing"]
+                waiting = state.pending.get(rid)
+                if waiting is not None and waiting.get("code") == d["code"]:
+                    return [], (d, rid, waiting, waiting["seq"])        # the same ask again: one pending record
+            return [("access", body)], (d, rid, body, None)
+
+        seqs, (d, rid, body, seq) = self._ledger.transact(step, self._now())
+        seq = seqs[0] if seqs else seq
+        out = {"decision": d["decision"], "code": d["code"], "request": rid, "access": seq, "by": base["by"]}
+        if d.get("reason"):
+            out["reason"] = d["reason"]
+        if d["decision"] == "needs_grant":
+            # what the host needs to ask for authorization, and to correlate the answer after a restart
+            out["missing"] = d["missing"]
+            out["pending"] = {k: body.get(k) for k in ("request", "program", "instance", "site", "cap", "op", "account",
+                                                         "source", "resource", "receiver", "origins") if body.get(k) is not None}
+        if d["decision"] != "granted":
+            return out
+        out["grants"] = d["grants"]
+        if spec is None:
+            return out                                    # host-performed: decided and recorded, nothing sent
+        status = text = None
+        try:
+            resp = mc.transport.send(mc.wire(spec))      # broker-held credentials are added on the wire only
+            status, text = resp.status, resp.body
+            outcome = _eg.classify(status)
+        except _eg.TransportError as e:
+            outcome = e.kind
+        except Exception:
+            outcome = "unknown"
+        self._log("access_result", {"access": seq, "outcome": outcome, "status": status,
+                                    "body_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest() if text is not None else None})
+        out.update(outcome=outcome, performed=outcome == "performed")
+        if status is not None:
+            out.update(status=status, body=text)
+        return out
+
+    @staticmethod
+    def _no(body: dict, q: dict, code: str, reason: str):
+        """A denial found while resolving the request inside the decision step."""
+        from casl import context as _cx
+        rid = _cx.request_id(dict(q, code=code))
+        full = dict(body, request=rid, decision="denied", code=code)
+        return [("access", full)], ({"decision": "denied", "code": code, "reason": reason}, rid, full, None)
 
     def _consent(self, params: dict) -> dict:
         """Mint a ONE-SHOT consent token bound to (cap, site) — the runtime form of the approval gate

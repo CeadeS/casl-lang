@@ -133,6 +133,16 @@ fn main() {
             );
         }
     }
+    // Context access: `CASL_BROKER_CONTEXTS` = JSON {cap: declared scope} (what the checked program declares).
+    if let Ok(text) = std::env::var("CASL_BROKER_CONTEXTS") {
+        match serde_json::from_str::<BTreeMap<String, serde_json::Value>>(&text) {
+            Ok(c) => broker.contexts = c,
+            Err(e) => {
+                eprintln!("casl-broker: CASL_BROKER_CONTEXTS is not a JSON object ({e})");
+                std::process::exit(2);
+            }
+        }
+    }
     // The run journal: `CASL_BROKER_JOURNAL` = path of the broker-owned SQLite file. If it is set but
     // cannot be opened or replayed the broker REFUSES to start (never run unjournaled by accident).
     if let Ok(path) = std::env::var("CASL_BROKER_JOURNAL") {

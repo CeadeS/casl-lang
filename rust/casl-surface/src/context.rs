@@ -64,6 +64,34 @@ pub fn path_covers(scope: &str, path: &str) -> bool {
                 .is_some_and(|rest| rest.starts_with('/')))
 }
 
+/// A model id as providers spell it, including `vendor/model`: no empty path part.
+pub fn valid_model(m: &str) -> bool {
+    !m.is_empty()
+        && m.len() <= 256
+        && m.chars()
+            .all(|c| c.is_ascii_alphanumeric() || "._:-/".contains(c))
+        && !m.starts_with('/')
+        && !m.ends_with('/')
+        && !m.contains("//")
+}
+
+/// An endpoint authority: `<host>` or `<host>:<port>`. The port is part of an endpoint's identity; the
+/// default port 443 is never written (one spelling per endpoint), so `host:443` is unsupported.
+pub fn valid_authority(a: &str) -> bool {
+    match a.split_once(':') {
+        None => valid_host(a),
+        Some((host, port)) => {
+            valid_host(host)
+                && !port.is_empty()
+                && port.len() <= 5
+                && port.chars().all(|c| c.is_ascii_digit())
+                && !port.starts_with('0')
+                && port.parse::<u32>().is_ok_and(|n| n <= 65535)
+                && port != "443"
+        }
+    }
+}
+
 /// A parsed disclosure receiver.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Receiver {
@@ -75,7 +103,8 @@ pub enum Receiver {
     },
 }
 
-/// `endpoint:<host><path>[#<model>]` (a resolved model/provider endpoint) or `workflow:<Name>`.
+/// `endpoint:<host>[:<port>]<path>[#<model>]` (a resolved model/provider endpoint) or `workflow:<Name>`.
+/// `host` holds the authority (with the port when one is written).
 /// `None` = unsupported.
 pub fn parse_receiver(r: &str) -> Option<Receiver> {
     if let Some(name) = r.strip_prefix("workflow:") {
@@ -91,16 +120,11 @@ pub fn parse_receiver(r: &str) -> Option<Receiver> {
     };
     let slash = rest.find('/').filter(|i| *i > 0)?;
     let (host, path) = rest.split_at(slash);
-    if !valid_host(host) || !valid_path(path) {
+    if !valid_authority(host) || !valid_path(path) {
         return None;
     }
-    if let Some(m) = model {
-        let ok = !m.is_empty()
-            && m.chars()
-                .all(|c| c.is_ascii_alphanumeric() || "._:-".contains(c));
-        if !ok {
-            return None;
-        }
+    if model.is_some_and(|m| !valid_model(m)) {
+        return None;
     }
     Some(Receiver::Endpoint {
         host: host.to_string(),

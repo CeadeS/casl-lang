@@ -1,8 +1,8 @@
 # Context grants — scoped search, read and disclosure
 
 **Status:** contract + reference + Rust port, pinned by one shared corpus (`casl.context_corpus`,
-`tests/test_context_grants.py`, `rust/casl-broker/tests/context_differential.rs`). Runtime enforcement at
-the broker is the next step (casl-lang#7); nothing here performs I/O.
+`tests/test_context_grants.py`, `rust/casl-broker/tests/context_differential.rs`), and enforced at the
+broker for every access it decides (`tests/test_context_access.py`, `tests/test_os_pilot_access.py`).
 
 ## The problem
 
@@ -69,8 +69,13 @@ not parse, the grant does not verify, the request is denied.
 |---|---|---|
 | source | a lower-case DNS host name; no IP literal, no port | equal hosts only |
 | resource | an absolute path of non-empty segments; no query, fragment, wildcard, percent-escape, `.`/`..`, trailing slash | itself and everything below it, segment-wise: `/a/b` covers `/a/b/c`, not `/a/bc` |
-| receiver | `endpoint:<host><path>[#<model>]` or `workflow:<Name>` | the same workflow; or the same host, a covering path and, if a model is named, exactly that model |
+| receiver | `endpoint:<host>[:<port>]<path>[#<model>]` or `workflow:<Name>` | the same workflow; or the same host and port, a covering path and, if a model is named, exactly that model |
 | account | the identity of the broker-held credential (`docs/os-pilot.md`, "Target account") | equal identities only |
+
+The port is part of an endpoint's identity; the default port 443 is never written. A model id may
+contain `/` (`vendor/model`). A declaration or a frame may name an endpoint without a model (an upper
+bound); a **grant and a request must name the concrete model**: protected content is released to one
+model, never to whatever runs at an endpoint.
 
 Matching is case-sensitive. A differently spelled path is not covered, even where the target system would
 treat it as the same resource: the error is on the denying side.
@@ -140,15 +145,81 @@ Grant verification codes: `ok`, `unsigned`, `malformed`, `bad_signature`, `unkno
 `class_insufficient`, `frame_malformed`, `frame_bad_signature`, `frame_untrusted`, `frame_key_mismatch`,
 `frame_revoked`, `outside_frame`, `parent_invalid`, `parent_revoked`, `outside_parent`.
 
+## Runtime: one access per call
+
+```sh
+casl grant add    --journal J --approvers K --grant grant.json
+casl grant revoke --journal J --id <grant or frame id>
+
+# the broker performs the access (HTTPS)
+casl access --program P.casl --site Summarize --request llm.json --journal J --approvers K \
+            --allow-hosts api.anthropic.com --auth-env LLM_KEY --account anthropic:work \
+            --instance run-1 --origins 12=/INBOX/seminar/4711
+
+# the host performs it itself (a local index, IMAP, a loopback model); CASL decides and records
+casl access --program P.casl --site Search --journal J --approvers K --instance run-1 \
+            --host-performed --account imap:uni:martin --source mail.uni.example --resource /INBOX/seminar
+```
+
+Exit: `0` granted (and performed, when the broker sends it) · `1` denied · `3` granted but not performed ·
+`4` needs a grant · `2` usage/IO. Checked example: `examples/os_pilot/mail_digest.casl`.
+
+**How the request is resolved.** From trusted inputs, not from what the caller says it is:
+
+| Field | Broker-performed | Host-performed |
+|---|---|---|
+| source, resource | host and path of the actual URL (the query is not part of the scope) | stated by the host |
+| account | the identity of the credential the broker adds | stated by the host |
+| receiver | host, port and path of the actual URL + the `model` field of the JSON body | stated by the host |
+| origins | the journal entries of the cited accesses | the same |
+
+A host-performed access is recorded as `by: host`. CASL decided it and has it on record; that the host's
+adapter stayed inside the scope is the host's statement, not something CASL saw.
+
+**Origins.** A disclosure cites the earlier accesses its content came from, by their journal id:
+`--origins 12,15=/INBOX/seminar/4711`. Each must be a granted search or read of the same program and
+run, made under a capability the disclosing capability lists in `from`. Account, source and resource
+scope are taken from that journal entry. A cited **read** stands for the resource that was read. A cited
+**search** must name the hit (`15=<resource>`), and the hit must lie inside what was searched: this is
+what binds a snippet from a search result to its account and resource. Every origin then needs a live
+disclosure grant towards the receiver.
+
+**At each call**, inside one journal transaction: replay grants, revocations and use counts; re-verify
+every grant against the current trust store; decide; write the `access` record. Only then is a granted
+request sent. Consequences:
+
+- Expiry and revocation take effect at the next call, in the same run and after a restart, without any
+  workflow timer. A request that was already decided is in flight and completes; a completed disclosure
+  cannot be recalled.
+- A request that is not granted is never sent, so a denied scope reveals no names, snippets, counts or
+  scores. A search is scoped by its path: a mailbox-wide search is outside a folder grant and is stopped.
+  CASL does not post-filter results; it relies on the target honoring the path.
+- `needs_grant` is recorded once per request: the same ask has the same `request` id and returns the
+  same record (`pending`: request id, program, instance, site, capability, operation, scope). When a
+  grant arrives the next call is decided afresh; an expired or revoked grant unlocks nothing.
+- A use counts against the grant relied on and each of its ancestors.
+- A capability with a context clause is performed by `access` only. `act` and the broker's plain
+  `effect` refuse it; `access` performs nothing that has no context clause, so it performs no write.
+
+**Audit.** Every decision is an `access` entry: request id, decision, code, program, instance, site,
+capability, operation, the resolved scope, the grants relied on, `by`. A broker-performed access adds an
+`access_result` with outcome, status and the hash of the response. Never the request body, the response
+or a credential.
+
 ## What this does not do yet
 
-- **No enforcement.** These are pure functions. Checking a grant at each access, counting uses, recording
-  revocations and audit events, and refusing a context capability outside this path is casl-lang#7.
+- **Host-performed accesses are attested, not enforced.** The local index, IMAP and a loopback model have
+  no broker transport yet; for them CASL is the decision and the record, not the gate.
+- **Loopback and non-HTTPS endpoints** are refused by the broker's destination policy. A local model can
+  only be reached host-performed today.
+- **No instance layer yet.** Each call stands alone; that a workflow resumes at the waiting step is
+  casl-lang#1. The pending record carries what that needs.
 - **Resource scopes are path prefixes.** That fits APIs whose path names the container. A target where a
   query parameter widens the result beyond the path is not expressible; such a request must be modelled
   as a wider resource or not at all.
-- **Provenance is declared, not traced.** A disclosure names its origins. That an excerpt really stems
-  from them is checked against the journal of reads at run time (casl-lang#7), not by following the data.
+- **Provenance is declared, not traced.** A disclosure names its origins, and they are checked against
+  the journal. That the disclosed text really stems from them, and from nothing else, is not checked: a
+  host that passes on content without citing where it came from is not detected.
 - **The frame's policy key** is as safe as the place the OS keeps it. A compromised OS process can issue
   any grant inside the frames it holds, and nothing outside them.
 - **Not yet a gated requirement.** The declaration is validated by the parser (an unsupported clause is a

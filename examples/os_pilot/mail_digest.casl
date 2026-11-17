@@ -1,0 +1,32 @@
+// =============================================================================
+// mail_digest.casl — the first context-access pilot (docs/context-grants.md).
+// =============================================================================
+// U = user, A = the mail assistant, X = the mailbox index, L = the selected model, T = the mailbox.
+//
+// A searches ONE folder of ONE mailbox (the host does it itself, in its local index: `casl access
+// --host-performed`), and discloses excerpts of the hits to ONE fixed model over HTTPS (`casl access`).
+// `summarize` may pass on what `lookup` found: a search hit carries a snippet.
+// Filing the digest is a write: it sits behind an approval gate and needs its own signed approval
+// (`casl act`) — no context grant covers it.
+//
+//   casl check examples/os_pilot/mail_digest.casl
+// =============================================================================
+protocol MailDigest {
+  roles U, A, X, L, T;
+  agent A caps {
+    lookup(query)   scope "mail:search" mode read context search source "mail.uni.example" resource "/INBOX/seminar" ttl 1 sig "md-1";
+    summarize(text) scope "llm:digest"  mode read context disclose receiver "endpoint:api.anthropic.com/v1/messages#claude-sonnet-5-5" from lookup ttl 1 sig "md-2";
+    file(note)      scope "mail:file"   mode write ttl 1 sig "md-3";
+  }
+
+  U -> A : Ask(topic: Str);
+  A -> X : Search(query: Str) uses lookup;
+  X -> A : Hits(count: Int);
+  A -> L : Summarize(excerpt: Str) uses summarize;
+  L -> A : Digest(text: Str);
+  A -> U : Propose(text: Str);
+  choice approval at U -> A {
+    Keep consent: { A -> T : File() uses file irreversible; }
+    Drop:         { A -> T : Skip(); }
+  }
+}

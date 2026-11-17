@@ -47,6 +47,27 @@ class RequestSpec:
                            headers=headers, body=str(obj.get("body", "")))
 
 
+def split_url(url) -> Optional[Tuple[str, Optional[str], str]]:
+    """(host, port | None, path) of a URL in the STRICT form `https://host[:port][/path][?query][#fragment]` —
+    the form the Rust broker's destination check accepts. The query is not part of the path (a context
+    scope is a path). None = not of that form. Port 443 is reported as None (one spelling per endpoint)."""
+    if not isinstance(url, str) or url[:8].lower() != "https://":
+        return None
+    if any(ord(c) <= 32 or ord(c) >= 127 or c == "\\" for c in url):
+        return None
+    rest = url[8:]
+    cut = min([i for i in (rest.find("/"), rest.find("?"), rest.find("#")) if i >= 0] or [len(rest)])
+    authority, tail = rest[:cut], rest[cut:]
+    host, sep, port = authority.partition(":")
+    host = host.lower()
+    if sep and not (0 < len(port) <= 5 and all(c in "0123456789" for c in port) and port[0] != "0"):
+        return None
+    if not host or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789.-" for c in host):
+        return None
+    path = tail.split("?", 1)[0].split("#", 1)[0] if tail.startswith("/") else ""
+    return host, (port if sep and port != "443" else None), (path or "/")
+
+
 def _is_blocked_host(host: str) -> bool:
     """Block loopback/link-local/private/reserved/multicast/unspecified IP LITERALS (SSRF defense-in-depth).
     A hostname (not an IP literal) is left to the allowlist — we do not resolve DNS here (offline + no
