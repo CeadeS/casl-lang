@@ -23,7 +23,7 @@ use serde_json::{json, Value};
 
 use crate::{read_or_io_err, verdict, Args, Verdict};
 
-const VALFLAGS: &[&str] = &[
+pub(crate) const VALFLAGS: &[&str] = &[
     "--program",
     "--site",
     "--request",
@@ -45,7 +45,13 @@ const VALFLAGS: &[&str] = &[
     "--source",
     "--resource",
     "--receiver",
+    "--label",
+    "--fields",
+    "--decision",
 ];
+
+/// The step of a workflow instance an action is performed as: (instance id, step number).
+pub(crate) type Step<'a> = Option<(&'a str, i64)>;
 
 /// What the program says about an effect site.
 struct Site {
@@ -113,18 +119,27 @@ fn find_site(p: &surf::Protocol, label: &str) -> Result<Site, String> {
     Ok(Site { cap, irreversible })
 }
 
-struct Loaded {
-    hash: String,
+pub(crate) struct Loaded {
+    pub(crate) hash: String,
     site_name: String,
     site: Site,
     /// cap → the context scope the program declares for it (docs/context-grants.md).
-    contexts: BTreeMap<String, Value>,
+    pub(crate) contexts: BTreeMap<String, Value>,
+    pub(crate) program: surf::Protocol,
 }
 
 /// Read + parse + CHECK the program (it must be accepted) and locate the site. `Err` = (exit code, message).
 fn load(a: &Args) -> Result<Loaded, (i32, String)> {
-    let (Some(file), Some(label)) = (a.val("program"), a.val("site")) else {
+    let Some(label) = a.val("site") else {
         return Err((2, "--program FILE and --site LABEL are required".into()));
+    };
+    load_site(a, Some(label))
+}
+
+/// As `load`; without a label only the program is loaded (the site is a placeholder, never performed).
+pub(crate) fn load_site(a: &Args, label: Option<&str>) -> Result<Loaded, (i32, String)> {
+    let Some(file) = a.val("program") else {
+        return Err((2, "--program FILE is required".into()));
     };
     let src = read_or_io_err(file).map_err(|c| (c, format!("cannot read {file}")))?;
     let p = surf::parse(&src).map_err(|e| (2, format!("parse error: {e}")))?;
@@ -138,7 +153,13 @@ fn load(a: &Args) -> Result<Loaded, (i32, String)> {
             ))
         }
     }
-    let site = find_site(&p, label).map_err(|e| (1, e))?;
+    let site = match label {
+        Some(l) => find_site(&p, l).map_err(|e| (1, e))?,
+        None => Site {
+            cap: String::new(),
+            irreversible: false,
+        },
+    };
     let contexts = p
         .caps
         .values()
@@ -147,13 +168,14 @@ fn load(a: &Args) -> Result<Loaded, (i32, String)> {
         .collect();
     Ok(Loaded {
         hash: format!("sha256:{}", journal::sha256_hex(src.as_bytes())),
-        site_name: format!("{}:{}", p.name, label),
+        site_name: format!("{}:{}", p.name, label.unwrap_or("")),
         site,
         contexts,
+        program: p,
     })
 }
 
-fn read_json(path: &str) -> Result<Value, (i32, String)> {
+pub(crate) fn read_json(path: &str) -> Result<Value, (i32, String)> {
     let text = fs::read_to_string(path).map_err(|_| (2, format!("cannot read {path}")))?;
     serde_json::from_str(&text).map_err(|e| (2, format!("{path}: not JSON ({e})")))
 }
@@ -197,7 +219,7 @@ fn credential(a: &Args) -> Result<Credential, (i32, String)> {
     ))
 }
 
-fn fail(code: i32, msg: String) -> i32 {
+pub(crate) fn fail(code: i32, msg: String) -> i32 {
     println!("{}", json!({"status": "error", "error": msg}));
     code
 }
@@ -231,6 +253,21 @@ pub fn cmd_prepare(args: &[String]) -> i32 {
     if let Some(id) = account {
         sign["account"] = json!(id); // whose account the request acts on — show it to the approver
     }
+    if let Some(id) = a.val("instance") {
+        // a step of a workflow instance: the approval names the instance and the step it stands at
+        let Some(jp) = a.val("journal") else {
+            return fail(2, "--instance needs --journal PATH".into());
+        };
+        let state = journal::Journal::open_readonly(jp).and_then(|j| j.state());
+        match state.map(|st| st.instances.get(id).map(|i| i.steps.len())) {
+            Ok(Some(n)) => {
+                sign["instance"] = json!(id);
+                sign["step"] = json!(n);
+            }
+            Ok(None) => return fail(1, format!("no instance {id:?} in this journal")),
+            Err(e) => return fail(2, e),
+        }
+    }
     println!(
         "{}",
         json!({"status": "ok", "irreversible": l.site.irreversible, "sign": sign,
@@ -262,7 +299,7 @@ fn open_journal(b: Broker, path: &str) -> Result<Broker, (i32, String)> {
 /// `casl act` — perform ONE approved action through the broker.
 pub fn cmd_act(args: &[String]) -> i32 {
     let a = Args::parse(args, VALFLAGS);
-    match act(&a) {
+    match act(&a, None, None) {
         Ok((code, out)) => {
             println!("{out}");
             code
@@ -271,8 +308,16 @@ pub fn cmd_act(args: &[String]) -> i32 {
     }
 }
 
-fn act(a: &Args) -> Result<(i32, Value), (i32, String)> {
-    let l = load(a)?;
+pub(crate) fn act(
+    a: &Args,
+    label: Option<&str>,
+    step: Step,
+) -> Result<(i32, Value), (i32, String)> {
+    let l = match label {
+        Some(_) => load_site(a, label)?,
+        None => load(a)?,
+    };
+    let (inst, n) = (step.map(|s| s.0), step.map(|s| s.1));
     let request = read_json(
         a.val("request")
             .ok_or((2, "--request FILE is required".to_string()))?,
@@ -328,6 +373,7 @@ fn act(a: &Args) -> Result<(i32, Value), (i32, String)> {
             .with_approvers(approvers, Some(l.hash.clone()), class);
         b = open_journal(b, jp)?;
     } else if let Some(jp) = a.val("journal") {
+        b.program_hash = Some(l.hash.clone());
         b = open_journal(b, jp)?;
     }
     let (inject, account) = credential(a)?;
@@ -354,7 +400,7 @@ fn act(a: &Args) -> Result<(i32, Value), (i32, String)> {
         let c = rpc(
             &mut b,
             "consent",
-            json!({"site": l.site_name, "tool": cap, "signed": signed}),
+            json!({"site": l.site_name, "tool": cap, "signed": signed, "instance": inst, "step": n}),
         )
         .map_err(internal)?;
         token = c.get("token").cloned().unwrap_or(Value::Null);
@@ -372,7 +418,8 @@ fn act(a: &Args) -> Result<(i32, Value), (i32, String)> {
     let e = rpc(
         &mut b,
         "effect",
-        json!({"site": l.site_name, "tool": cap, "approval": token, "request": request}),
+        json!({"site": l.site_name, "tool": cap, "approval": token, "request": request,
+               "instance": inst, "step": n}),
     )
     .map_err(internal)?;
     let allowed = e.get("allowed").and_then(Value::as_bool).unwrap_or(false);
@@ -541,7 +588,7 @@ fn parse_origins(text: &str) -> Result<Value, (i32, String)> {
 /// 3 granted but not performed (target outcome) · 4 needs a grant.
 pub fn cmd_access(args: &[String]) -> i32 {
     let a = Args::parse(args, VALFLAGS);
-    match access(&a) {
+    match access(&a, None, None) {
         Ok((code, out)) => {
             println!("{out}");
             code
@@ -550,8 +597,15 @@ pub fn cmd_access(args: &[String]) -> i32 {
     }
 }
 
-fn access(a: &Args) -> Result<(i32, Value), (i32, String)> {
-    let l = load(a)?;
+pub(crate) fn access(
+    a: &Args,
+    label: Option<&str>,
+    step: Step,
+) -> Result<(i32, Value), (i32, String)> {
+    let l = match label {
+        Some(_) => load_site(a, label)?,
+        None => load(a)?,
+    };
     let cap = l.site.cap.clone();
     if !l.contexts.contains_key(&cap) {
         return Err((
@@ -569,6 +623,10 @@ fn access(a: &Args) -> Result<(i32, Value), (i32, String)> {
     );
     b.contexts = l.contexts.clone();
     let mut params = json!({"site": l.site_name, "tool": cap, "instance": a.val("instance")});
+    if let Some((i, n)) = step {
+        params["instance"] = json!(i);
+        params["step"] = json!(n);
+    }
     if let Some(o) = a.val("origins") {
         params["origins"] = parse_origins(o)?;
     }

@@ -42,6 +42,8 @@ pub enum Conflict {
     Exists,
     /// `ctx_grant`: another grant is on record under this id.
     DuplicateId,
+    /// `intent` of a workflow instance: the instance is unknown, ended, or no longer at that step.
+    Stale,
 }
 
 /// Why a reservation did not write.
@@ -54,6 +56,21 @@ pub enum ReserveError {
 /// What a repeat is blocked on: (identity of the credential used, request digest). The same request
 /// under another account is another resource (`POST /me/...`), hence another scope.
 pub type Scope = (Option<String>, String);
+
+/// A workflow instance (docs/instances.md): a checked program plus the steps completed so far. Where the
+/// instance stands is derived by walking the program's global type along `steps` — nothing is replayed.
+#[derive(Debug, Clone, Default)]
+pub struct Instance {
+    /// the program version (hash) the instance was started on
+    pub program: String,
+    pub name: String,
+    /// completed steps, in order: `{n, label, kind, seq}`
+    pub steps: Vec<Value>,
+    /// the attempt of the current step that is in flight or has an unknown outcome
+    pub open: Option<i64>,
+    /// `{state, request?}` once the instance was denied or cancelled
+    pub ended: Option<Value>,
+}
 
 /// The state the entries imply (mirrors `casl.journal.State`). Shared by the durable journal and the
 /// in-memory ledger so both decide identically.
@@ -78,9 +95,53 @@ pub struct State {
     pub accesses: BTreeMap<i64, Value>,
     /// request id → the access that waits for a grant (with its `seq`)
     pub pending: BTreeMap<String, Value>,
+    // -- workflow instances (docs/instances.md) --
+    pub instances: BTreeMap<String, Instance>,
+    /// attempt → (instance, step, label): an irreversible effect performed as a step
+    attempt_steps: BTreeMap<i64, (String, i64, String)>,
+    /// granted, broker-performed access → (instance, step, label)
+    access_steps: BTreeMap<i64, (String, i64, String)>,
+}
+
+/// `(instance, step, label)` if the entry is tagged as a step of an instance.
+fn step_tag(b: &Value) -> Option<(String, i64, String)> {
+    Some((
+        b.get("instance")?.as_str()?.to_string(),
+        b.get("step").filter(|v| v.is_i64())?.as_i64()?,
+        b.get("label")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
+    ))
 }
 
 impl State {
+    /// Step `n` of the instance is complete — only if it IS the instance's current step.
+    fn complete(&mut self, tag: &(String, i64, String), kind: &str, seq: i64) {
+        if let Some(inst) = self.instances.get_mut(&tag.0) {
+            if inst.ended.is_none() && inst.steps.len() as i64 == tag.1 {
+                inst.steps.push(
+                    serde_json::json!({"n": tag.1, "label": tag.2, "kind": kind, "seq": seq}),
+                );
+            }
+        }
+    }
+
+    /// Why a step `n` of `instance` may not start now (`None` = it may). `program`: the version the
+    /// caller runs, if it states one.
+    pub fn step_refusal(&self, instance: &str, n: i64, program: Option<&str>) -> Option<Conflict> {
+        let Some(inst) = self.instances.get(instance) else {
+            return Some(Conflict::Stale);
+        };
+        if inst.ended.is_some()
+            || inst.steps.len() as i64 != n
+            || program.is_some_and(|p| p != inst.program)
+        {
+            return Some(Conflict::Stale);
+        }
+        inst.open.map(Conflict::Unresolved)
+    }
+
     pub fn apply(&mut self, seq: i64, kind: &str, b: &Value) {
         let s = |k: &str| b.get(k).and_then(Value::as_str).map(str::to_string);
         match kind {
@@ -89,8 +150,48 @@ impl State {
                     self.nonces.insert(n);
                 }
             }
+            "instance" => {
+                if let (Some(id), Some(program)) = (s("id"), s("program")) {
+                    self.instances.entry(id).or_insert_with(|| Instance {
+                        program,
+                        name: s("name").unwrap_or_default(),
+                        ..Default::default()
+                    });
+                }
+            }
+            "step" => {
+                if let Some(tag) = step_tag(b) {
+                    let kind = s("kind").unwrap_or_else(|| "message".into());
+                    self.complete(&tag, &kind, seq);
+                }
+            }
+            "instance_end" => {
+                if let Some(inst) = s("instance").and_then(|i| self.instances.get_mut(&i)) {
+                    if inst.ended.is_none() {
+                        inst.ended = Some(
+                            serde_json::json!({"state": b.get("state"), "request": b.get("request"), "seq": seq}),
+                        );
+                    }
+                }
+            }
+            "access_result" => {
+                let tag = b
+                    .get("access")
+                    .and_then(Value::as_i64)
+                    .and_then(|a| self.access_steps.get(&a))
+                    .cloned();
+                if let (Some(tag), Some("performed")) = (tag, s("outcome").as_deref()) {
+                    self.complete(&tag, "context", seq);
+                }
+            }
             "intent" => {
                 if let Some(d) = s("effect") {
+                    if let Some(tag) = step_tag(b) {
+                        if let Some(inst) = self.instances.get_mut(&tag.0) {
+                            inst.open = Some(seq);
+                        }
+                        self.attempt_steps.insert(seq, tag);
+                    }
                     let scope = (s("account"), d);
                     self.attempts.insert(seq, scope.clone());
                     self.scopes.insert(scope, ("unknown".into(), seq));
@@ -113,6 +214,13 @@ impl State {
                 let Some(request) = s("request") else { return };
                 match b.get("decision").and_then(Value::as_str) {
                     Some("granted") => {
+                        if let Some(tag) = step_tag(b) {
+                            if b.get("by").and_then(Value::as_str) == Some("host") {
+                                self.complete(&tag, "context", seq); // the host performs it itself
+                            } else {
+                                self.access_steps.insert(seq, tag); // complete once it was performed
+                            }
+                        }
                         self.accesses.insert(seq, b.clone());
                         for i in b
                             .get("counted")
@@ -152,6 +260,19 @@ impl State {
                             .max()
                     }),
                 };
+                if let Some(tag) = attempt.and_then(|a| self.attempt_steps.get(&a)).cloned() {
+                    // an unknown outcome keeps the step open: no other attempt of it may start
+                    if outcome != "unknown" {
+                        if let Some(inst) = self.instances.get_mut(&tag.0) {
+                            if inst.open == attempt {
+                                inst.open = None;
+                            }
+                        }
+                    }
+                    if outcome == "performed" {
+                        self.complete(&tag, "effect", seq);
+                    }
+                }
                 if let Some(scope) = attempt.and_then(|a| self.attempts.get(&a)).cloned() {
                     if self.scopes.get(&scope).map(|st| st.1) == attempt {
                         self.scopes.insert(scope, (outcome, attempt.unwrap_or(0)));
@@ -172,6 +293,19 @@ impl State {
                 }
             }
             "intent" => {
+                if let Some(inst) = b.get("instance").filter(|v| !v.is_null()) {
+                    // a step of a workflow instance: only the instance's CURRENT step may be attempted,
+                    // and only one attempt of it at a time
+                    let n = b.get("step").filter(|v| v.is_i64()).and_then(Value::as_i64);
+                    match (inst.as_str(), n) {
+                        (Some(i), Some(n)) => {
+                            if let Some(c) = self.step_refusal(i, n, s(b, "program").as_deref()) {
+                                return Err(c);
+                            }
+                        }
+                        _ => return Err(Conflict::Stale),
+                    }
+                }
                 let scope = (s(b, "account"), s(b, "effect").unwrap_or_default());
                 if let Some((st, attempt)) = self.scopes.get(&scope) {
                     if st == "unknown" {

@@ -24,6 +24,7 @@ use std::fs;
 use std::path::Path;
 
 mod act;
+mod instance;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -62,6 +63,7 @@ fn dispatch(args: &[String]) -> i32 {
         "journal" => act::cmd_journal(rest),
         "grant" => act::cmd_grant(rest),
         "access" => act::cmd_access(rest),
+        "instance" => instance::cmd_instance(rest),
         // Engines not yet ported to Rust — defer to the Python `casl` rather than pretend.
         "new" | "synth" | "ide" | "gate" | "trace" | "blame" | "observe" | "init" => deferred(cmd),
         other => {
@@ -101,6 +103,14 @@ context access — scoped search / read / disclosure under signed grants (docs/c
          [--auth-env VAR (--account ID | --account-from-token)] [--origins 12,15=/path]
          [--host-performed --account A --source S --resource P | --receiver X]
                                                  (0 granted / 1 denied / 3 not performed / 4 needs a grant)
+
+workflow instances — a checked choreography across decisions and restarts (docs/instances.md):
+  instance start   --program F --journal J [--id ID]
+  instance status  --program F --journal J --instance I         where it stands, what it accepts next
+  instance deliver --program F --journal J --instance I --label L [--fields F.json] [flags of act | access]
+                                                 (0 delivered / 1 refused / 3 not complete / 4 needs a grant)
+  instance decide  --journal J --instance I --decision denied|cancelled [--request RID]
+  prepare … --instance I --journal J             the approval then names the instance and its step
 
 deferred to the Python `casl` (engines not yet ported to Rust):
   new · synth · ide · gate · trace · blame · observe · init

@@ -94,7 +94,11 @@ def verify_signed(env, *, approvers: Dict[str, str], program: Optional[str], cap
     if not (isinstance(p, dict) and type(p.get("v")) is int and p["v"] == 1 and p.get("kind") == "action"
             and all(isinstance(p.get(k), str) and p.get(k) for k in ("program", "cap", "site", "request", "nonce"))
             and type(p.get("exp")) is int and -2 ** 63 <= p["exp"] < 2 ** 63
-            and ("account" not in p or (isinstance(p["account"], str) and p["account"]))):
+            and ("account" not in p or (isinstance(p["account"], str) and p["account"]))
+            # optional `instance` + `step` (a step of a workflow instance): both or neither
+            and ("instance" in p) == ("step" in p)
+            and ("instance" not in p or (isinstance(p["instance"], str) and p["instance"]
+                                         and type(p["step"]) is int and 0 <= p["step"] < 2 ** 63))):
         return False, "malformed", "payload is not a v1 action approval", None, klass
     if not program or p["program"] != program:
         return False, "program_mismatch", "approval is for a different program version", None, klass

@@ -212,8 +212,8 @@ or a credential.
   no broker transport yet; for them CASL is the decision and the record, not the gate.
 - **Loopback and non-HTTPS endpoints** are refused by the broker's destination policy. A local model can
   only be reached host-performed today.
-- **No instance layer yet.** Each call stands alone; that a workflow resumes at the waiting step is
-  casl-lang#1. The pending record carries what that needs.
+- **A bare `casl access` stands alone.** That a workflow resumes at the waiting step is the instance
+  layer (`docs/instances.md`): there an access is a step of the instance.
 - **Resource scopes are path prefixes.** That fits APIs whose path names the container. A target where a
   query parameter widens the result beyond the path is not expressible; such a request must be modelled
   as a wider resource or not at all.

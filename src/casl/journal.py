@@ -23,6 +23,12 @@ Context accesses (docs/context-grants.md):
   access    {request, decision, code, program, instance, site, cap, op, account, source, resource |
              receiver, origins, grants, counted, by}  — one decision about one access; never content
   access_result {access, outcome, status, body_sha256} — how a broker-performed access ended
+Workflow instances (docs/instances.md; written and replayed by the Rust broker and `casl instance`):
+  instance  {id, program, name}                       — a run of one program version was started
+  step      {instance, step, label, kind, fields_sha256, program}   — a message/choice/reversible effect completed
+  instance_end {instance, state, request}             — denied | cancelled
+  `intent`, `access` and `approval` carry `instance` + `step` when they belong to a step. This reference
+  does not derive instance state: it ignores these kinds and refuses to perform an instance step.
 
 Derived state (`State`), replayed from the entries:
   · the used approval nonces — one approval, one token, across restarts and across processes;

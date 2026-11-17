@@ -91,3 +91,12 @@ sharing a journal therefore cannot both use one approval or both send the same i
 
 **Journal.** Every signed approval, every irreversible intent (before the send) and its result are appended
 to the broker-owned journal (`src/casl/journal.py` documents the format).
+
+## Workflow instances (docs/instances.md)
+
+`effect`, `consent` and `access` take optional `instance` (string) and `step` (integer ≥ 0): the call is that
+step of that instance. The Rust broker performs it only while the journal says the instance stands at that
+step and runs the same program version (`outcome: "stale_step"` / `code: "stale_step"` otherwise), and allows
+one open attempt per step (`unresolved`). A signed approval must name the same `instance` and `step` in its
+payload — or neither (`binding_mismatch`). The Python reference checks the approval binding and refuses to
+perform instance steps.

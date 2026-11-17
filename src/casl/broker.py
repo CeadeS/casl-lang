@@ -31,6 +31,16 @@ PROTOCOL_VERSION = "0.1"
 SERVER_CAPABILITIES = ("oracle", "effect", "consent", "resolve", "access", "grant", "revoke")   # the methods this broker offers
 
 
+def _step_ref(params: dict):
+    """(instance, step) a consent is asked for, or (None, None). A half-given pair matches nothing."""
+    i, n = params.get("instance"), params.get("step")
+    if i is None and n is None:
+        return None, None
+    if isinstance(i, str) and i and type(n) is int and n >= 0:
+        return i, n
+    return object(), object()
+
+
 class _BrokerError(Exception):
     def __init__(self, code: int, msg: str):
         super().__init__(msg)
@@ -156,6 +166,11 @@ class Broker:
         if tool not in self.granted_tools:               # deny-by-default (fail-safe)
             return {"allowed": False, "tool": tool, "site": site,
                     "reason": f"capability {tool!r} not granted for site {site} (deny-by-default)"}
+        if params.get("instance") is not None or params.get("step") is not None:
+            # a step of a workflow instance is performed only while the instance stands at that step; the
+            # instance state lives in the Rust broker's journal replay (docs/instances.md)
+            return {"allowed": False, "tool": tool, "site": site, "outcome": "stale_step",
+                    "reason": "workflow instance steps are performed by the Rust broker (`casl instance deliver`)"}
         if tool in self.contexts:
             # a context capability reads or discloses protected data: it runs only through `access`, where
             # the grant is checked — never through the plain effect path (no bypass of the workflow step)
@@ -500,6 +515,11 @@ class Broker:
                 account=account)
             if not ok:
                 return {"granted": False, "code": code, "reason": reason}
+            if (payload.get("instance"), payload.get("step")) != _step_ref(params):
+                # an approval is for ONE step of ONE workflow instance — or for an action outside any
+                # instance; it never carries over (docs/instances.md)
+                return {"granted": False, "code": "binding_mismatch",
+                        "reason": "approval is for a different workflow instance/step"}
             # journal the verified approval (payload + signature ⇒ re-verifiable later) BEFORE minting — as a
             # RESERVATION of the nonce: of several broker processes holding the same approval, one wins
             from casl import journal as _j

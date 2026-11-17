@@ -73,6 +73,9 @@ pub struct Verified {
     pub key: String,
     /// The target account the approval names (identity of the broker-held credential), if any.
     pub account: Option<String>,
+    /// The workflow instance and step the approval names, if it is for a step of an instance.
+    pub instance: Option<String>,
+    pub step: Option<i64>,
 }
 
 /// A typed denial: a stable code (compared cross-implementation) + a human-readable reason.
@@ -180,6 +183,20 @@ pub fn verify_signed(
         Some(Value::String(s)) if !s.is_empty() => Some(s.as_str()),
         Some(_) => return deny("malformed", "payload is not a v1 action approval"),
     };
+    // optional `instance` + `step` (a step of a workflow instance): both or neither
+    let pi = match p.as_ref().and_then(|p| p.get("instance")) {
+        None => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(_) => return deny("malformed", "payload is not a v1 action approval"),
+    };
+    let pst = match p.as_ref().and_then(|p| p.get("step")) {
+        None => None,
+        Some(v) if v.as_i64().is_some_and(|n| n >= 0) && (v.is_i64() || v.is_u64()) => v.as_i64(),
+        Some(_) => return deny("malformed", "payload is not a v1 action approval"),
+    };
+    if pi.is_some() != pst.is_some() {
+        return deny("malformed", "payload is not a v1 action approval");
+    }
     if program.is_none_or(|have| have.is_empty() || have != pp) {
         return deny(
             "program_mismatch",
@@ -222,6 +239,8 @@ pub fn verify_signed(
         exp,
         key,
         account: pa.map(str::to_string),
+        instance: pi,
+        step: pst,
     })
 }
 

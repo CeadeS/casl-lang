@@ -62,6 +62,14 @@ the record). Both brokers, pinned by shared corpora (`tests/test_approval_signed
 
 Open: `act` runs one site, not the conducted choreography; signed/anchored journal head; key validity
 windows and issuer-signed approver credentials; `resolve` is not yet signed; OAuth token refresh.
+- **Workflow instances** (casl-lang#1, `docs/instances.md`): `casl instance start | status | deliver | decide`.
+  A run of a checked choreography across user decisions and restarts: the journal holds the program version
+  and the completed steps; the position is derived by walking the global type, nothing is replayed. Steps are
+  messages, choices, effects (`act`) and context accesses (`access`); only the expected message with the
+  declared fields is accepted. A step without a grant waits (`needs_grant`, pending request listed by
+  `status`) and is decided afresh when delivered again; an unknown outcome blocks the step until `resolve`.
+  Approvals for an instance step name `instance` and `step` (`binding_mismatch` otherwise; both brokers).
+  First cut: sequential programs, no oracle sites, no timers. `tests/test_os_pilot_instance.py`.
 
 ## [0.45.0] — 2026-06-30 — mediated-egress reference (b) + Layer-2 review scaffold
 

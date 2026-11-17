@@ -151,6 +151,17 @@ impl Ledger {
 /// What a valid consent token is bound to: (request digest, approval nonce, target account).
 type ConsentBinding = (Option<String>, Option<String>, Option<String>);
 
+/// The step of a workflow instance an action belongs to (docs/instances.md).
+type StepRef = Option<(String, i64)>;
+
+fn step_ref(instance: &Option<String>, step: Option<i64>) -> Result<StepRef, ()> {
+    match (instance.as_deref().filter(|i| !i.is_empty()), step) {
+        (None, None) => Ok(None),
+        (Some(i), Some(n)) if n >= 0 => Ok(Some((i.to_string(), n))),
+        _ => Err(()),
+    }
+}
+
 /// A one-shot consent record minted by the approval gate, bound to (cap, site). (A)
 struct Consent {
     cap: String,
@@ -161,6 +172,8 @@ struct Consent {
     nonce: Option<String>,
     /// Signed approvals: the target account the approval named (None = no credential involved).
     account: Option<String>,
+    /// The instance step the approval was given for (None = not a step of an instance).
+    step: StepRef,
     used: bool,
 }
 
@@ -277,10 +290,11 @@ impl Broker {
         cap: &str,
         site: &str,
         request: Option<&serde_json::Value>,
+        step: &StepRef,
     ) -> Result<ConsentBinding, String> {
         let c = token
             .and_then(|t| self.consents.get(t))
-            .filter(|c| !c.used && c.cap == cap && c.site == site)
+            .filter(|c| !c.used && c.cap == cap && c.site == site && &c.step == step)
             .ok_or_else(|| {
                 format!(
                     "irreversible effect {cap:?} at {site} needs a fresh matching approval token (deny-by-default)"
@@ -339,6 +353,29 @@ impl Broker {
                 None,
             ));
         }
+        let Ok(step) = step_ref(&p.instance, p.step) else {
+            return Ok(deny(
+                "an instance step needs both `instance` and `step`".into(),
+                None,
+            ));
+        };
+        if let Some((i, n)) = &step {
+            // a step of a workflow instance: performed only while the instance stands at that step
+            match self
+                .ledger
+                .state()?
+                .step_refusal(i, *n, self.program_hash.as_deref())
+            {
+                None => {}
+                Some(journal::Conflict::Unresolved(a)) => return Ok(unresolved(a, None)),
+                Some(_) => {
+                    return Ok(deny(
+                        format!("instance {i:?} is not at step {n} of this program (stale, ended or unknown)"),
+                        Some("stale_step"),
+                    ))
+                }
+            }
+        }
         if self.contexts.contains_key(&tool) {
             // a context capability reads or discloses protected data: it runs only through `access`,
             // where the grant is checked — never through the plain effect path
@@ -385,11 +422,16 @@ impl Broker {
         let mut attempt: Option<i64> = None;
         if irreversible {
             // (A) an irreversible cap needs a fresh, matching, one-shot consent token.
-            let (bound, nonce, _account) =
-                match self.check_consent(p.approval.as_deref(), &tool, &site, p.request.as_ref()) {
-                    Ok(x) => x,
-                    Err(reason) => return Ok(deny(reason, None)),
-                };
+            let (bound, nonce, _account) = match self.check_consent(
+                p.approval.as_deref(),
+                &tool,
+                &site,
+                p.request.as_ref(),
+                &step,
+            ) {
+                Ok(x) => x,
+                Err(reason) => return Ok(deny(reason, None)),
+            };
             match &digest {
                 None => {
                     self.log(
@@ -404,11 +446,23 @@ impl Broker {
                     // after this line the journal still says the request may have gone out (an intent
                     // without a result replays as "unknown").
                     let now = self.now();
-                    let body = json!({"effect": d, "cap": tool, "site": site, "nonce": nonce, "account": held});
+                    let mut body = json!({"effect": d, "cap": tool, "site": site, "nonce": nonce, "account": held});
+                    if let Some((i, n)) = &step {
+                        body["instance"] = json!(i);
+                        body["step"] = json!(n);
+                        body["label"] = json!(site.rsplit(':').next());
+                        body["program"] = json!(self.program_hash);
+                    }
                     match self.ledger.reserve("intent", body, now) {
                         Ok((seq, _)) => attempt = Some(seq),
                         Err(journal::ReserveError::Conflict(journal::Conflict::Unresolved(a))) => {
                             return Ok(unresolved(a, held))
+                        }
+                        Err(journal::ReserveError::Conflict(journal::Conflict::Stale)) => {
+                            return Ok(deny(
+                                "the instance is no longer at this step".into(),
+                                Some("stale_step"),
+                            ))
                         }
                         Err(journal::ReserveError::Conflict(_)) => {
                             return Ok(deny(
@@ -697,6 +751,23 @@ impl Broker {
                             approver_class: None,
                             account: None,
                         },
+                        Ok(v)
+                            if step_ref(&p.instance, p.step).ok()
+                                != Some(v.instance.clone().zip(v.step)) =>
+                        {
+                            // an approval is for ONE step of ONE instance — or for an action outside
+                            // any instance; it never carries over
+                            ConsentResult {
+                                granted: false,
+                                token: None,
+                                reason: Some(
+                                    "approval is for a different workflow instance/step".into(),
+                                ),
+                                code: Some("binding_mismatch".into()),
+                                approver_class: None,
+                                account: None,
+                            }
+                        }
                         Ok(v) => {
                             // journal the verified approval (payload + signature ⇒ re-verifiable
                             // later) BEFORE minting the token — as a RESERVATION of the nonce: of
@@ -706,6 +777,7 @@ impl Broker {
                             let body = json!({"nonce": v.nonce, "cap": p.tool, "site": p.site,
                                               "request": v.request, "program": v.program, "exp": v.exp,
                                               "key": v.key, "class": v.class, "account": v.account,
+                                              "instance": v.instance, "step": v.step,
                                               "payload": part("payload"), "sig": part("sig")});
                             match self.ledger.reserve("approval", body, now) {
                                 Ok(_) => {}
@@ -733,6 +805,7 @@ impl Broker {
                                     request: Some(v.request),
                                     nonce: Some(v.nonce),
                                     account: v.account.clone(),
+                                    step: v.instance.clone().zip(v.step),
                                     used: false,
                                 },
                             );
@@ -779,6 +852,7 @@ impl Broker {
                             request,
                             nonce: None,
                             account: None,
+                            step: step_ref(&p.instance, p.step).ok().flatten(),
                             used: false,
                         },
                     );
@@ -918,7 +992,16 @@ impl Broker {
             .filter(|v| !v.is_null())
             .cloned();
         let by = if hp.is_some() { "host" } else { "broker" };
-        let base = json!({"program": self.program_hash, "instance": instance, "site": site, "cap": cap, "by": by});
+        let mut base = json!({"program": self.program_hash, "instance": instance, "site": site, "cap": cap, "by": by});
+        // a step of a workflow instance (docs/instances.md): decided only while the instance stands there
+        let step_n = params
+            .get("step")
+            .filter(|v| v.is_i64() && !instance.is_null())
+            .and_then(Value::as_i64);
+        if let Some(n) = step_n {
+            base["step"] = json!(n);
+            base["label"] = json!(site.rsplit(':').next());
+        }
         let Some(decl) = decl else {
             return self.access_early(
                 &base,
@@ -937,6 +1020,9 @@ impl Broker {
             );
         };
         let mut q = json!({"program": program, "instance": instance, "cap": cap, "op": op});
+        if let Some(n) = step_n {
+            q["step"] = json!(n); // the same ask at a later step is another request
+        }
         let mut spec: Option<egress::RequestSpec> = None;
         if let Some(hp) = &hp {
             // the HOST performs this access (a local index, IMAP, a loopback model): the broker decides
@@ -1031,6 +1117,14 @@ impl Broker {
             let mut q = q;
             let mut body = base_ref.clone();
             body["op"] = json!(op_ref);
+            if let (Some(n), Some(i)) = (step_n, q["instance"].as_str()) {
+                if state.step_refusal(i, n, q["program"].as_str()).is_some() {
+                    // nothing is recorded: the step this access belonged to is gone
+                    let d = json!({"decision": "denied", "code": "stale_step",
+                                   "reason": "the instance is not at this step (stale, ended, blocked or unknown)"});
+                    return Ok((Vec::new(), (d, context::request_id(&q), body, None)));
+                }
+            }
             let mut cited: Vec<Value> = Vec::new();
             if op_ref == "disclose" {
                 // ORIGINS: where the disclosed content came from — earlier GRANTED search/read accesses

@@ -141,6 +141,12 @@ pub struct EffectParams {
     /// only for the request whose digest it was minted for.
     #[serde(default)]
     pub request: Option<Value>,
+    /// Workflow instance (docs/instances.md): this effect is step `step` of `instance`. The broker
+    /// performs it only while the instance stands at that step, and the approval must name both.
+    #[serde(default)]
+    pub instance: Option<String>,
+    #[serde(default)]
+    pub step: Option<i64>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -203,6 +209,12 @@ pub struct ConsentParams {
     /// then `approved` alone mints nothing. Kept as a raw value so a malformed envelope is a typed denial.
     #[serde(default)]
     pub signed: Option<Value>,
+    /// Workflow instance: the step the approval is asked for. A signed approval must name exactly this
+    /// instance and step — or neither, when the action is not a step of an instance.
+    #[serde(default)]
+    pub instance: Option<String>,
+    #[serde(default)]
+    pub step: Option<i64>,
 }
 
 /// `consent` result: a one-shot token (when granted) bound to (tool, site), for the matching effect.

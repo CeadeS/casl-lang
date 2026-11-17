@@ -75,7 +75,7 @@ of the credential it is about to use, at consent and again at execution; a misma
 
 ## What is not (yet)
 
-- `act` executes one effect site; it does not conduct the whole choreography.
+- `act` executes one effect site. A flow of several steps is an instance (`docs/instances.md`).
 - `resolve` is not signed: the host can record a wrong finding. A retry still needs a new human approval.
 - The journal chain does not detect truncation of its tail or a full rewrite (needs a signed head).
 - The trust store is a local key list: no validity windows, no revocation, no issuer-signed credentials.
