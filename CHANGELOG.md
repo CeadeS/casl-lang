@@ -69,7 +69,8 @@ windows and issuer-signed approver credentials; `resolve` is not yet signed; OAu
   declared fields is accepted. A step without a grant waits (`needs_grant`, pending request listed by
   `status`) and is decided afresh when delivered again; an unknown outcome blocks the step until `resolve`.
   Approvals for an instance step name `instance` and `step` (`binding_mismatch` otherwise; both brokers).
-  First cut: sequential programs, no oracle sites, no timers. `tests/test_os_pilot_instance.py`.
+  First cut: sequential programs, no oracle sites. No runtime timers by decision: deadlines become explicit
+  timeout branches in a program later. `tests/test_os_pilot_instance.py`.
 
 ## [0.45.0] — 2026-06-30 — mediated-egress reference (b) + Layer-2 review scaffold
 

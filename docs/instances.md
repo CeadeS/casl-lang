@@ -30,6 +30,8 @@ A changed program is a new instance.
 `status` lists what the instance accepts next. Only one of those messages can be delivered; anything else
 is refused (`unexpected_label`) and leaves no trace. Fields are checked against the declared names and
 sorts (`Int`, `Real`, `Bool`, `Str`). Field values are not stored — the journal keeps their hash.
+The host therefore keeps what the values refer to (the mail, the file): CASL restores the position and the
+pending request, not the inputs.
 
 | step (`kind`) | how it is delivered | complete when |
 |---|---|---|
@@ -89,7 +91,10 @@ approval, not with a changed request. Clarify at the target, then `casl resolve 
 
 - **Sequential programs only.** `async` programs are not certified by the Rust front-end and are refused.
 - **No oracle sites.** A program with an oracle message is refused at `start`.
-- **No timers.** Nothing fires on its own; grant expiry is checked at delivery.
+- **No timers, by decision.** Nothing fires on its own. A pending grant request stays pending; showing it
+  and reminding the user is the host's job. A grant that expires is noticed at the next access. A workflow
+  that must react to a deadline will say so in its program, as an explicit timeout branch — not as a
+  timer of the runtime. That branch does not exist yet.
 - **Crash handlers are not walked.**
 - **A reversible effect is not at-most-once.** If the process dies between the send and the `step` entry,
   the step is delivered again. The same holds for a broker-performed context access that was granted twice
