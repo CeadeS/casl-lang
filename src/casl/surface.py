@@ -9,8 +9,10 @@ contracts, monitors, metatheory).
 Grammar (informal):
   protocol Name { decl* body }
   decl  := 'roles' Id (',' Id)* ';'
-         | 'agent' Id 'caps' '{' (Id '(' Id (',' Id)* ')' 'scope' Str ('mode' ('read'|'write'|'admin'))? 'ttl' Int 'sig' Str ';')* '}'
+         | 'agent' Id 'caps' '{' (Id '(' Id (',' Id)* ')' 'scope' Str ('mode' ('read'|'write'|'admin'))? Context? 'ttl' Int 'sig' Str ';')* '}'
          | 'crash' Id ';'
+  Context := 'context' ('search'|'read') 'source' Str 'resource' Str
+           | 'context' 'disclose' 'receiver' Str 'from' Id (',' Id)*
   body  := stmt*                          (sequence; tail may be choice/rec/continue)
   stmt  := Id '->' Id ':' Label params? attr* ';'
          | 'rec' Id ('measure' Id 'bound' Int)? '{' body '}'
@@ -168,11 +170,25 @@ class Parser:
                         self.eat("mode"); mode = self.ident()
                         if mode not in core.CAP_MODES:
                             raise SyntaxError(f"invalid mode {mode!r} (allowed: {', '.join(core.CAP_MODES)})")
+                    context = None   # optional structured data scope (docs/context-grants.md)
+                    if self.val() == "context":
+                        self.eat("context"); op = self.ident()
+                        if op == "disclose":
+                            self.eat("receiver"); receiver = self.string()
+                            self.eat("from"); srcs = [self.ident()]
+                            while self.val() == ",":
+                                self.eat(","); srcs.append(self.ident())
+                            context = core.ContextDecl(op, receiver=receiver, sources=tuple(srcs))
+                        else:
+                            self.eat("source"); source = self.string()
+                            self.eat("resource"); resource = self.string()
+                            context = core.ContextDecl(op, source=source, resource=resource)
                     self.eat("ttl"); ttl = self.number()
                     self.eat("sig"); sig = self.string()
                     self.eat(";")
-                    cl.append(Capability(tool, tuple(params), scope, ttl, sig, mode))
+                    cl.append(Capability(tool, tuple(params), scope, ttl, sig, mode, context))
                 self.eat("}")
+                core.check_context_decls(cl)   # deny-by-default: an unsupported scope is a parse error
                 caps[r] = tuple(cl)
             else:  # crash
                 self.eat("crash")

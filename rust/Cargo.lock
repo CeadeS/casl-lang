@@ -58,6 +58,7 @@ name = "casl-broker"
 version = "0.1.0"
 dependencies = [
  "casl-proto",
+ "casl-surface",
  "ed25519-dalek",
  "rusqlite",
  "serde",

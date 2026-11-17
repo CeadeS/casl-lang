@@ -7,6 +7,7 @@ description = "CASL capability broker — the reference monitor (Rust). Mediates
 
 [dependencies]
 casl-proto = { path = "../casl-proto" }
+casl-surface = { path = "../casl-surface" }
 serde.workspace = true
 serde_json.workspace = true
 # Signed approvals (engineering-plan §8: dalek for signatures); sha2 for the request digest.

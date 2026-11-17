@@ -16,6 +16,7 @@ use proto::{
 use serde_json::json;
 
 pub mod approval;
+pub mod context;
 pub mod egress;
 pub mod journal;
 pub mod live;

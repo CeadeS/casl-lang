@@ -1,0 +1,44 @@
+// =============================================================================
+// seminar_review.casl — a batch review with SCOPED CONTEXT (docs/context-grants.md).
+// =============================================================================
+// U = user, R = review agent, M = the university mailbox, L = the selected review model.
+//
+// R searches ONE folder of ONE source for submissions, reads the matching attachments, and
+// discloses excerpts to ONE model endpoint. Each capability declares the data scope it REQUESTS:
+//
+//   find    search   in graph.microsoft.com  /v1.0/me/mailFolders/seminar
+//   fetch   read     in graph.microsoft.com  /v1.0/me/mailFolders/seminar
+//   review  disclose what `fetch` read  →  endpoint:api.anthropic.com/v1/messages#claude-sonnet-5-5
+//   plain   (no context clause: it can never be used for a context access)
+//
+// The declaration authorizes nothing. At run time each access needs a live GRANT for the effective
+// account (whose mailbox `/me` is), issued by the user or by the OS policy key inside a user-signed
+// frame. One grant per operation covers the whole batch; a personal mailbox, another folder or
+// another model is outside it. A context grant never authorizes a write.
+//
+//   casl check examples/os_pilot/seminar_review.casl
+// =============================================================================
+protocol SeminarReview {
+  roles U, R, M, L;
+  agent R caps {
+    find(query)   scope "mail:search" mode read context search source "graph.microsoft.com" resource "/v1.0/me/mailFolders/seminar" ttl 50 sig "sr-1";
+    fetch(item)   scope "mail:read"   mode read context read   source "graph.microsoft.com" resource "/v1.0/me/mailFolders/seminar" ttl 50 sig "sr-2";
+    review(text)  scope "llm:review"  mode read context disclose receiver "endpoint:api.anthropic.com/v1/messages#claude-sonnet-5-5" from fetch ttl 50 sig "sr-3";
+    plain(note)   scope "notes"       mode read ttl 50 sig "sr-4";
+  }
+
+  U -> R : Start(topic: Str);
+  R -> M : Find(query: Str) uses find;
+  M -> R : Hits(count: Int);
+  rec Batch measure count bound 50 {
+    R -> M : Fetch(item: Str) uses fetch;
+    M -> R : Attachment(size: Int);
+    R -> L : Review(excerpt: Str) uses review;
+    L -> R : Opinion(text: Str);
+    R -> U : Progress(done: Int);
+    choice at U -> R {
+      More: { R -> M : Again(); R -> L : Next(); continue Batch; }
+      Done: { R -> M : Stop(); R -> L : Finish(); R -> U : Report(summary: Str); }
+    }
+  }
+}

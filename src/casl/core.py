@@ -31,6 +31,119 @@ Role = str  # "C", "A", "J"
 CAP_MODES = ("read", "write", "admin")
 
 
+# --------------------------------------------------------------------------
+# Context scope (docs/context-grants.md): WHICH data a capability may search, read or disclose.
+# Structured and validated — like `mode`, never inferred from the free-text `scope` (LH-Q-012's lesson).
+# The selector grammar is deliberately small: whatever is not exactly of this form is UNSUPPORTED and
+# fails closed (rejected at parse, denied at match).
+# --------------------------------------------------------------------------
+CONTEXT_OPS = ("search", "read", "disclose")
+_PATH_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._~!$&'()+,;=:@-")
+_HOST_CHARS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789.-")
+_NAME_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_")
+_MODEL_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:-")
+
+
+def valid_host(h) -> bool:
+    """A SOURCE / endpoint host: a plain lower-case DNS name. No IP literal, no `localhost`, no port."""
+    return (isinstance(h, str) and 0 < len(h) <= 253 and all(c in _HOST_CHARS for c in h)
+            and h[0] not in ".-" and h[-1] not in ".-" and ".." not in h
+            and any(c.isalpha() for c in h) and h != "localhost")
+
+
+def valid_path(p) -> bool:
+    """A RESOURCE scope / endpoint path: absolute, segment-wise, unambiguous. No query, fragment, wildcard,
+    percent-escape, empty/`.`/`..` segment or trailing slash (other than the root `/`)."""
+    if not (isinstance(p, str) and 0 < len(p) <= 2048 and p[0] == "/"):
+        return False
+    if p == "/":
+        return True
+    return all(seg and seg not in (".", "..") and all(c in _PATH_CHARS for c in seg) for seg in p[1:].split("/"))
+
+
+def path_covers(scope, path) -> bool:
+    """`scope` covers `path` iff both are valid and `path` is `scope` itself or lies below it, SEGMENT-wise
+    (`/a/b` covers `/a/b/c`, not `/a/bc`). Case-sensitive: a differently spelled path is not covered."""
+    return (valid_path(scope) and valid_path(path)
+            and (scope == "/" or path == scope or path.startswith(scope + "/")))
+
+
+def parse_receiver(r):
+    """A disclosure RECEIVER: `endpoint:<host><path>[#<model>]` (a resolved model/provider endpoint) or
+    `workflow:<Name>` (another workflow). Returns (kind, host_or_name, path, model) or None if unsupported."""
+    if not isinstance(r, str):
+        return None
+    if r.startswith("workflow:"):
+        name = r[len("workflow:"):]
+        ok = bool(name) and all(c in _NAME_CHARS for c in name) and not name[0].isdigit()
+        return ("workflow", name, "", "") if ok else None
+    if r.startswith("endpoint:"):
+        rest, sep, model = r[len("endpoint:"):].partition("#")
+        slash = rest.find("/")
+        if slash <= 0:
+            return None
+        host, path = rest[:slash], rest[slash:]
+        if not (valid_host(host) and valid_path(path)):
+            return None
+        if sep and not (model and all(c in _MODEL_CHARS for c in model)):
+            return None
+        return ("endpoint", host, path, model)
+    return None
+
+
+def receiver_covers(scope, receiver) -> bool:
+    """`scope` covers `receiver`: the same workflow; or the same endpoint host, a covering path and — if the
+    scope names a model — exactly that model (a scope without a model covers every model at the endpoint)."""
+    s, r = parse_receiver(scope), parse_receiver(receiver)
+    if s is None or r is None or s[0] != r[0]:
+        return False
+    if s[0] == "workflow":
+        return s[1] == r[1]
+    return s[1] == r[1] and path_covers(s[2], r[2]) and (s[3] == "" or s[3] == r[3])
+
+
+@dataclass(frozen=True)
+class ContextDecl:
+    """The context scope a capability REQUESTS (a declaration, not an authorization — docs/context-grants.md).
+    search/read: `source` + `resource`. disclose: `receiver` + `sources` (the capabilities whose content may
+    be passed on)."""
+    op: str
+    source: str = ""
+    resource: str = ""
+    receiver: str = ""
+    sources: Tuple[str, ...] = ()
+
+
+def check_context_decls(caps) -> None:
+    """Validate the context clauses of ONE agent's capabilities; raise SyntaxError on the first violation
+    (deny-by-default: a malformed, ambiguous or unsupported scope never becomes part of a program)."""
+    by_tool = {c.tool: c for c in caps}
+    for c in caps:
+        d = c.context
+        if d is None:
+            continue
+        if d.op not in CONTEXT_OPS:
+            raise SyntaxError(f"capability {c.tool}: invalid context operation {d.op!r} (allowed: {', '.join(CONTEXT_OPS)})")
+        if c.mode != "read":
+            raise SyntaxError(f"capability {c.tool}: a context capability must be `mode read` "
+                              f"(a context scope never authorizes a write)")
+        if d.op == "disclose":
+            if parse_receiver(d.receiver) is None:
+                raise SyntaxError(f"capability {c.tool}: unsupported receiver {d.receiver!r} "
+                                  f"(endpoint:<host><path>[#<model>] | workflow:<Name>)")
+            if not d.sources or len(set(d.sources)) != len(d.sources):
+                raise SyntaxError(f"capability {c.tool}: `from` must name the capabilities whose content is disclosed, each once")
+            for name in d.sources:
+                src = by_tool.get(name)
+                if src is None or src.context is None or src.context.op not in ("search", "read"):
+                    raise SyntaxError(f"capability {c.tool}: `from {name}` is not a search/read context capability of this agent")
+        else:
+            if not valid_host(d.source):
+                raise SyntaxError(f"capability {c.tool}: unsupported source {d.source!r} (a plain DNS host name)")
+            if not valid_path(d.resource):
+                raise SyntaxError(f"capability {c.tool}: unsupported resource {d.resource!r} (an absolute path, no wildcards)")
+
+
 @dataclass(frozen=True)
 class Capability:
     tool: str
@@ -41,6 +154,7 @@ class Capability:
                           # Deliberately not consumed by a check yet (economy of mechanism: no
                           # unmotivated gate); reserved for future delegation-provenance integrity. [W8]
     mode: str = "write"   # read | write | admin (effect-bearing by default)
+    context: Optional["ContextDecl"] = None   # the data scope this capability requests (search/read/disclose)
 
     def __str__(self) -> str:
         return (f"(tool={self.tool}, params={list(self.params)}, "

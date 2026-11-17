@@ -38,6 +38,14 @@ the record). Both brokers, pinned by shared corpora (`tests/test_approval_signed
   outcome blocks the scope (account, request digest), not the digest alone; `resolve` takes the attempt
   (`casl resolve --attempt N`) and reports whose it was. Effect results carry `attempt`, `account`,
   `request` instead of `effect`.
+- **Context grants, the contract** (casl-lang#6; `docs/context-grants.md`): a capability can declare the
+  data scope it requests — `context search|read source "…" resource "…"` or
+  `context disclose receiver "…" from <caps>` — validated at parse (Python + Rust, an unsupported clause
+  does not parse). `casl.context` / `casl-broker::context`: signed grants (user key, or OS policy key
+  inside a user-signed frame, or derived from a parent grant), containment, intersection for delegation,
+  and the typed decision `granted | needs_grant | denied`. One corpus of 43 decisions, 39 verifications,
+  9 intersections and 16 rejected programs drives both implementations. Example
+  `examples/os_pilot/seminar_review.casl`. No runtime enforcement yet (casl-lang#7).
 - **Host interface** (`casl prepare | act | resolve | journal verify`, Rust CLI): one approved action through
   the broker, JSON out. Template `examples/os_pilot/create_task.casl`; walkthrough `docs/os-pilot.md`;
   end-to-end acceptance `tests/test_os_pilot_act.py`.

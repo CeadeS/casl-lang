@@ -2,6 +2,166 @@
   {
     "ast": {
       "async_k": null,
+      "caps": {
+        "R": [
+          {
+            "context": {
+              "from": [],
+              "op": "search",
+              "receiver": "",
+              "resource": "/folders/seminar",
+              "source": "mail.example.org"
+            },
+            "mode": "read",
+            "params": [
+              "q"
+            ],
+            "scope": "mail:search",
+            "sigma": "c1",
+            "tool": "find",
+            "ttl": 1
+          },
+          {
+            "context": {
+              "from": [],
+              "op": "read",
+              "receiver": "",
+              "resource": "/folders/seminar",
+              "source": "mail.example.org"
+            },
+            "mode": "read",
+            "params": [
+              "i"
+            ],
+            "scope": "mail:read",
+            "sigma": "c2",
+            "tool": "fetch",
+            "ttl": 1
+          },
+          {
+            "context": {
+              "from": [
+                "fetch",
+                "find"
+              ],
+              "op": "disclose",
+              "receiver": "endpoint:llm.example.org/v1/messages#model-a",
+              "resource": "",
+              "source": ""
+            },
+            "mode": "read",
+            "params": [
+              "t"
+            ],
+            "scope": "llm",
+            "sigma": "c3",
+            "tool": "review",
+            "ttl": 1
+          },
+          {
+            "context": {
+              "from": [
+                "fetch"
+              ],
+              "op": "disclose",
+              "receiver": "workflow:Grader",
+              "resource": "",
+              "source": ""
+            },
+            "mode": "read",
+            "params": [
+              "t"
+            ],
+            "scope": "wf",
+            "sigma": "c4",
+            "tool": "hand",
+            "ttl": 1
+          }
+        ]
+      },
+      "crash": [],
+      "env": [],
+      "gtype": {
+        "cont": {
+          "cont": {
+            "cont": {
+              "cont": {
+                "cont": {
+                  "node": "end"
+                },
+                "contract": null,
+                "fields": [],
+                "from_oracle": false,
+                "irreversible": false,
+                "label": "Done",
+                "node": "comm",
+                "on_crash": null,
+                "receiver": "U",
+                "sender": "L",
+                "uses": null,
+                "verified": false
+              },
+              "contract": null,
+              "fields": [],
+              "from_oracle": false,
+              "irreversible": false,
+              "label": "Review",
+              "node": "comm",
+              "on_crash": null,
+              "receiver": "L",
+              "sender": "R",
+              "uses": "review",
+              "verified": false
+            },
+            "contract": null,
+            "fields": [],
+            "from_oracle": false,
+            "irreversible": false,
+            "label": "Fetch",
+            "node": "comm",
+            "on_crash": null,
+            "receiver": "M",
+            "sender": "R",
+            "uses": "fetch",
+            "verified": false
+          },
+          "contract": null,
+          "fields": [],
+          "from_oracle": false,
+          "irreversible": false,
+          "label": "Find",
+          "node": "comm",
+          "on_crash": null,
+          "receiver": "M",
+          "sender": "R",
+          "uses": "find",
+          "verified": false
+        },
+        "contract": null,
+        "fields": [],
+        "from_oracle": false,
+        "irreversible": false,
+        "label": "Start",
+        "node": "comm",
+        "on_crash": null,
+        "receiver": "R",
+        "sender": "U",
+        "uses": null,
+        "verified": false
+      },
+      "name": "Ctx",
+      "roles": [
+        "U",
+        "R",
+        "M",
+        "L"
+      ]
+    },
+    "casl": "protocol Ctx {\n  roles U, R, M, L;\n  agent R caps {\n    find(q) scope \"mail:search\" mode read context search source \"mail.example.org\" resource \"/folders/seminar\" ttl 1 sig \"c1\";\n    fetch(i) scope \"mail:read\" mode read context read source \"mail.example.org\" resource \"/folders/seminar\" ttl 1 sig \"c2\";\n    review(t) scope \"llm\" mode read context disclose receiver \"endpoint:llm.example.org/v1/messages#model-a\" from fetch, find ttl 1 sig \"c3\";\n    hand(t) scope \"wf\" mode read context disclose receiver \"workflow:Grader\" from fetch ttl 1 sig \"c4\";\n  }\n  U -> R : Start();\n  R -> M : Find() uses find;\n  R -> M : Fetch() uses fetch;\n  R -> L : Review() uses review;\n  L -> U : Done();\n}"
+  },
+  {
+    "ast": {
+      "async_k": null,
       "caps": {},
       "crash": [],
       "env": [],

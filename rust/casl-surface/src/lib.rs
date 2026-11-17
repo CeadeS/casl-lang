@@ -14,6 +14,8 @@
 
 #![forbid(unsafe_code)]
 
+pub mod context;
+
 use std::collections::BTreeMap;
 
 // ===========================================================================
@@ -89,6 +91,8 @@ pub struct Capability {
     pub ttl: i64,
     pub sigma: String,
     pub mode: String,
+    /// The data scope this capability requests (search/read/disclose) — docs/context-grants.md.
+    pub context: Option<context::ContextDecl>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -352,6 +356,39 @@ impl Parser {
                                 ));
                             }
                         }
+                        // optional structured data scope (docs/context-grants.md)
+                        let mut ctx: Option<context::ContextDecl> = None;
+                        if self.val() == "context" {
+                            self.eat("context")?;
+                            let op = self.ident()?;
+                            if op == "disclose" {
+                                self.eat("receiver")?;
+                                let receiver = self.string()?;
+                                self.eat("from")?;
+                                let mut sources = vec![self.ident()?];
+                                while self.val() == "," {
+                                    self.eat(",")?;
+                                    sources.push(self.ident()?);
+                                }
+                                ctx = Some(context::ContextDecl {
+                                    op,
+                                    receiver,
+                                    sources,
+                                    ..Default::default()
+                                });
+                            } else {
+                                self.eat("source")?;
+                                let source = self.string()?;
+                                self.eat("resource")?;
+                                let resource = self.string()?;
+                                ctx = Some(context::ContextDecl {
+                                    op,
+                                    source,
+                                    resource,
+                                    ..Default::default()
+                                });
+                            }
+                        }
                         self.eat("ttl")?;
                         let ttl = self.number()?;
                         self.eat("sig")?;
@@ -364,9 +401,12 @@ impl Parser {
                             ttl,
                             sigma: sig,
                             mode,
+                            context: ctx,
                         });
                     }
                     self.eat("}")?;
+                    // deny-by-default: an unsupported scope is a parse error
+                    context::check_context_decls(&cl)?;
                     caps.insert(r, cl);
                 }
                 _ => {
@@ -800,14 +840,30 @@ fn gtyp_json(g: &Gtyp) -> String {
 
 fn cap_json(c: &Capability) -> String {
     let params: Vec<String> = c.params.iter().map(|p| jstr(p)).collect();
+    // `context` is emitted only when declared — older corpus entries stay byte-identical
+    let ctx = match &c.context {
+        None => String::new(),
+        Some(d) => {
+            let from: Vec<String> = d.sources.iter().map(|s| jstr(s)).collect();
+            format!(
+                ",\"context\":{{\"op\":{},\"source\":{},\"resource\":{},\"receiver\":{},\"from\":[{}]}}",
+                jstr(&d.op),
+                jstr(&d.source),
+                jstr(&d.resource),
+                jstr(&d.receiver),
+                from.join(",")
+            )
+        }
+    };
     format!(
-        "{{\"tool\":{},\"params\":[{}],\"scope\":{},\"ttl\":{},\"sigma\":{},\"mode\":{}}}",
+        "{{\"tool\":{},\"params\":[{}],\"scope\":{},\"ttl\":{},\"sigma\":{},\"mode\":{}{}}}",
         jstr(&c.tool),
         params.join(","),
         jstr(&c.scope),
         c.ttl,
         jstr(&c.sigma),
-        jstr(&c.mode)
+        jstr(&c.mode),
+        ctx
     )
 }
 

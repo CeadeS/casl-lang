@@ -59,8 +59,13 @@ def gtype_to_json(g) -> dict:
 
 
 def _cap(c) -> dict:
-    return {"tool": c.tool, "params": list(c.params), "scope": c.scope, "ttl": c.ttl,
-            "sigma": c.sigma, "mode": c.mode}
+    out = {"tool": c.tool, "params": list(c.params), "scope": c.scope, "ttl": c.ttl,
+           "sigma": c.sigma, "mode": c.mode}
+    if c.context is not None:        # emitted only when declared — older corpus entries stay byte-identical
+        d = c.context
+        out["context"] = {"op": d.op, "source": d.source, "resource": d.resource,
+                          "receiver": d.receiver, "from": list(d.sources)}
+    return out
 
 
 def protocol_to_json(p) -> dict:
@@ -75,6 +80,14 @@ def protocol_to_json(p) -> dict:
 # Inline cases pin the grammar features that exercise the parser (some may be intentionally not well-formed —
 # the differential is about PARSE structure, not the checker's verdict).
 _INLINE: List[str] = [
+    # context scopes (docs/context-grants.md): search + read on a source/resource, disclose to a receiver
+    ('protocol Ctx {\n  roles U, R, M, L;\n  agent R caps {\n'
+     '    find(q) scope "mail:search" mode read context search source "mail.example.org" resource "/folders/seminar" ttl 1 sig "c1";\n'
+     '    fetch(i) scope "mail:read" mode read context read source "mail.example.org" resource "/folders/seminar" ttl 1 sig "c2";\n'
+     '    review(t) scope "llm" mode read context disclose receiver "endpoint:llm.example.org/v1/messages#model-a" from fetch, find ttl 1 sig "c3";\n'
+     '    hand(t) scope "wf" mode read context disclose receiver "workflow:Grader" from fetch ttl 1 sig "c4";\n  }\n'
+     '  U -> R : Start();\n  R -> M : Find() uses find;\n  R -> M : Fetch() uses fetch;\n'
+     '  R -> L : Review() uses review;\n  L -> U : Done();\n}'),
     # forwarding (name = Src.field) + a typed forward
     'protocol Fwd {\n  roles C, A;\n  C -> A : Req(x: Int);\n  A -> C : Res(y = Req.x, z: Int = Req.x);\n}',
     # approval choice + consent branch + uses + irreversible + an effect cap (mode)
